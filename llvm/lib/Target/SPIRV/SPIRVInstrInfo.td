@@ -122,6 +122,15 @@ def OpMemberDecorate: Op<72, (outs), (ins TYPE:$t, i32imm:$m, Decoration:$d, var
 // TODO Currently some deprecated opcodes are missing: OpDecorationGroup,
 // OpGroupDecorate and OpGroupMemberDecorate
 
+// DEPRECATED
+def OpDecorationGroup: Op<73, (outs ID:$r), (ins), "$r = OpDecorationGroup">;
+
+// DEPRECATED
+def OpGroupDecorate: Op<74, (outs), (ins TYPE:$t, variable_ops), "OpGroupDecorate $t">;
+
+//DEPRECATED
+def OpGroupMemberDecorate: Op<75, (outs), (ins TYPE:$t, variable_ops), "OpGroupMemberDecorate $t">;
+
 def OpDecorateId: Op<332, (outs), (ins ANY:$target, Decoration:$dec, variable_ops),
                   "OpDecorateId $target $dec">;
 def OpDecorateString: Op<5632, (outs), (ins ANY:$t, Decoration:$d, StringImm:$s, variable_ops),
@@ -669,9 +678,219 @@ def OpNamedBarrierInitialize: UnOp<"OpNamedBarrierInitialize", 328>;
 def OpMemoryNamedBarrier: Op<329, (outs), (ins ID:$barr, ID:$mem, ID:$sem),
                   "OpMemoryNamedBarrier $barr $mem $sem">;
 
-// TODO Complete this list, or auto-generate it, to include later sections such as
 // 3.32.21. Group and Subgroup Instructions,
+
+
+class GroupOP<string name, bits<16> opCode>: Op<opCode, (outs ID:$res),
+                  (ins TYPE:$t, ID:$sc, GroupOperation:$op, ID:$x ),
+                  "$res = #name# $t $sc $op $x">;
+
+class KhrOP<string name, bits<16> opCode>: Op<opCode, (outs ID:$res), 
+				   (ins TYPE: $t, ID:$value), "$res = #name# $t $value">;
+
+def OpGroupAsyncCopy: Op<259, (outs ID:$res), (ins TYPE:$id, ID:$dest, ID:$src, ID: $numelemnts, ID: $stride,
+ ID: $event), "$res = OpGroupAsyncCopy $dest $src $numelemnts $stride $event">;
+
+def OPGroupWaitEvents: Op<260, (outs),(ins ID:$exec, ID:$numevents, ID:$evlsts), "OPGroupWaitEvents $exec $numevents $evlsts">;
+def OpGroupAll: Op<261, (outs ID:$res), (ins TYPE:$t, ID:$sc, ID:$pred ), "$res = OpGroupAll $t $sc $pred">;
+def OpGroupAny: Op<262, (outs ID:$res), (ins TYPE:$t, ID:$sc, ID:$pred ), "$res = OpGroupAny $t $sc $pred">;
+def OpGroupBroadcast: Op<263, (outs ID:$res), (ins TYPE:$t, ID:$sc, ID:$value, ID:$localid ), "$res = OpGroupBroadcast $t $sc $value $localid">;
+def OpGroupIAdd: GroupOP<"OpGroupIAdd", 264>;
+def OpGroupFAdd: GroupOP<"OpGroupFAdd", 265>;
+def OpGroupFMin: GroupOP<"OpGroupFMin", 266>;
+def OpGroupUMin: GroupOP<"OpGroupUMin", 267>;
+def OpGroupSMin: GroupOP<"OpGroupSMin", 268>;
+def OpGroupFMax: GroupOP<"OpGroupFMax", 269>;
+def OpGroupUMax: GroupOP<"OpGroupUMax", 270>;
+def OpGroupSMax: GroupOP<"OpGroupSMax", 271>;
+def OpSubgroupBallotKHR: KhrOP<"OpSubgroupBallotKHR", 4421>;
+def OpSubgroupFirstInvocationKHR: KhrOP<"OpSubgroupFirstInvocationKHR", 4422>;
+def OpSubgroupAllKHR: KhrOP<"OpSubgroupAllKHR", 4428>;
+def OpSubgroupAnyKHR: KhrOP<"OpSubgroupAnyKHR", 4429>;
+def OpSubgroupAllEqualKHR: KhrOP<"OpSubgroupAllEqualKHR", 4430>;
+def OpSubgroupReadInvocationKHR: KhrOP<"OpSubgroupReadInvocationKHR", 4432>;
+def OpGroupIAddNonUniformAMD: GroupOP<"OpGroupIAddNonUniformAMD", 5000>;
+def OpGroupFAddNonUniformAMD: GroupOP<"OpGroupFAddNonUniformAMD", 5001>;
+def OpGroupFMinNonUniformAMD: GroupOP<"OpGroupFMinNonUniformAMD", 5002>;
+def OpGroupUMinNonUniformAMD: GroupOP<"OpGroupUMinNonUniformAMD", 5003>;
+def OpGroupSMinNonUniformAMD: GroupOP<"OpGroupSMinNonUniformAMD", 5004>;
+def OpGroupFMaxNonUniformAMD: GroupOP<"OpGroupFMaxNonUniformAMD", 5005>;
+def OpGroupUMaxNonUniformAMD: GroupOP<"OpGroupUMaxNonUniformAMD", 5006>;
+def OpGroupSMaxNonUniformAMD: GroupOP<"OpGroupSMaxNonUniformAMD", 5007>;
+def OpSubgroupShuffleINTEL: Op<5571, (outs ID:$res), (ins TYPE:$t, ID:$data, ID:$invocationId ),
+ "$res = OpSubgroupShuffleINTEL $t $data $invocationId">;
+def OpSubgroupShuffleDownINTEL: Op<5572, (outs ID:$res), (ins TYPE:$t, ID:$current, ID:$next, ID:$delta ),
+ "$res = OpSubgroupShuffleDownINTEL $t $current $next $delta">;
+def OpSubgroupShuffleUpINTEL: Op<5573, (outs ID:$res), (ins TYPE:$t, ID:$prev, ID:$current, ID:$delta),
+ "$res = OpSubgroupShuffleUpINTEL $t $prev $current $delta">;
+def OpSubgroupShuffleXorINTEL: Op<5574, (outs ID:$res), (ins TYPE:$t, ID:$data, ID:$value ),
+ "$res = OpSubgroupShuffleXorINTEL $t $data $value">;
+def OpSubgroupBlockReadINTEL: Op<5575, (outs ID:$res), (ins TYPE:$t, ID:$ptr ),
+ "$res = OpSubgroupBlockReadINTEL $t $ptr">;
+def OpSubgroupBlockWriteINTEL: Op<5576, (outs), (ins ID:$ptr, ID:$data),
+ "OpSubgroupBlockWriteINTEL $ptr $data">;
+def OpSubgroupImageBlockReadINTEL: Op<5577, (outs ID:$res), (ins TYPE:$t, ID:$image, ID:$coords ),
+ "$res = OpSubgroupImageBlockReadINTEL $t $image $coords">;
+def OpSubgroupImageBlockWriteINTEL: Op<5578, (outs), (ins ID:$image, ID:$coords, ID:$data ),
+ "OpSubgroupImageBlockWriteINTEL $image $coords $data">;
+def OpSubgroupImageMediaBlockReadINTEL: Op<5580, (outs ID:$res), (ins TYPE:$t, ID:$image, ID:$coords, ID:$width, ID:$height),
+ "$res = OpSubgroupImageMediaBlockReadINTEL $t $image $coords $width $height">;
+def OpSubgroupImageMediaBlockWriteINTEL: Op<5581, (outs), (ins ID:$image, ID:$coords, ID:$width, ID:$height, ID:$data),
+ "OpSubgroupImageMediaBlockWriteINTEL $image $coords $width $height $data">;
+ 
 // 3.32.22. Device-Side Enqueue Instructions,
+def OpEnqueueMarker: Op<291, (outs ID:$res), (ins TYPE:$t, ID:$queue, ID:$num_events, ID:$wait_events, ID:$ref_event),
+	"$res = OpEnqueueMarker $t $queue $num_events $wait_events $ref_event">;
+
+def OpEnqueueKernel: Op<292, (outs ID:$res), (ins TYPE:$t, ID:$queue, ID:$flags, ID:$nd_range, ID:$num_events,
+	ID:$wait_events, ID:$ret_events, ID:$invoke, ID:$param, ID:$param_size, ID:$param_align, variable_ops),
+	 "$res = OpEnqueueKernel $t $queue $flags $nd_range $num_events $wait_events $ret_events $invoke $param_size $param_align">;
+
+def OpGetKernelNDrangeSubGroupCount: Op<293, (outs ID:$res), (ins TYPE:$t, ID:$nd_range, 
+	ID:$invoke, ID:$param, ID:$param_size, ID:$param_align),
+	 "$res = OpGetKernelNDrangeSubGroupCount $t $nd_range $invoke $param_size $param_align">;
+
+def OpGetKernelNDrangeMaxSubGroupSize: Op<294, (outs ID:$res), (ins TYPE:$t, ID:$nd_range, 
+	ID:$invoke, ID:$param, ID:$param_size, ID:$param_align),
+	 "$res = OpGetKernelNDrangeMaxSubGroupSize $t $nd_range $invoke $param_size $param_align">;
+
+def OpGetKernelWorkGroupSize: Op<295, (outs ID:$res), (ins TYPE:$t, ID:$nd_range, 
+	ID:$invoke, ID:$param, ID:$param_size, ID:$param_align),
+	 "$res = OpGetKernelWorkGroupSize $t $nd_range $invoke $param_size $param_align">;
+
+def OpGetKernelPreferredWorkGroupSizeMultiple: Op<296, (outs ID:$res), (ins TYPE:$t, ID:$nd_range, 
+	ID:$invoke, ID:$param, ID:$param_size, ID:$param_align),
+	 "$res = OpGetKernelPreferredWorkGroupSizeMultiple $t $nd_range $invoke $param_size $param_align">;
+
+
+def OpRetainEvent: Op<297, (outs), (ins ID:$event), "OpRetainEvent $event">;
+def OpReleaseEvent: Op<298, (outs), (ins ID:$event), "OpReleaseEvent $event">;
+def OpCreateUserEvent: Op<299, (outs ID: $res), (ins TYPE:$t), "$res = OpCreateUserEvent $t">;
+def OpIsValidEvent: Op<300, (outs ID: $res), (ins TYPE:$t, ID:$event), "$res = OplsValidEvent $t $event">;
+def OpSetUserEventStatus: Op<301, (outs), (ins ID:$event, ID:$status), "OpSetUserEventStatus $event $status">;
+def OpCaptureEventProfilingInfo: Op<302, (outs), (ins ID:$event, ID:$profiling_info, ID:$value), 
+	"OpCaptureEventProfilingInfo $event $profiling_info $value">;
+
+def OpGetDefaultQueue: Op<303, (outs ID:$res), (ins TYPE:$t), "$res = OpGetDefaultQueue $t">;
+def OpBuildNDRange: Op<304, (outs ID:$res), (ins TYPE:$t, ID:$gws, ID:$lws, ID:$gwo), "$res = OpBuildNDRange $t $gws $lws $gwo">;
+def OpGetKernelLocalSizeForSubgroupCount: Op<325, (outs ID:$res), (ins TYPE:$t, ID:$sc, ID:$invoke, ID:$param, ID:$param_size, ID:$param_align),
+	"$res = OpGetKernelLocalSizeForSubgroupCount $t $sc $invoke $param $param_size $param_align">;
+def OpGetKernelMaxNumSubgroups: Op<326, (outs ID:$res), (ins TYPE:$t, ID:$invoke, ID:$param, ID:$param_size, ID:$param_align), 
+	"$res = OpGetKernelMaxNumSubgroups $t $invoke $param $param_size $param_align">;
+
 // 3.32.23. Pipe Instructions,
-// 3.32.24. Non-Uniform Instructions,
+def OpReadPipe: Op<274, (outs ID:$res),(ins TYPE:$t, ID:$pipe, ID:$pointer, ID:$pack_size, ID:$pack_align),
+ 	"$res = OpReadPipe $t $pipe $pointer $pack_size $pack_align">;
+def OpWritePipe: Op<275, (outs ID:$res),(ins TYPE:$t, ID:$pipe, ID:$pointer, ID:$pack_size, ID:$pack_align),
+	"$res = OpWritePipe $t $pipe $pointer $pack_size $pack_align">;
+def OpReservedReadPipe: Op<276, (outs ID:$res), (ins TYPE: $t, ID: $pipe, ID: $res_id, ID:$idx, ID:$ptr, ID:$pack_size, ID:$pack_align), 
+	"$res = OpReservedReadPipe $t $pipe $res_id $idx $ptr $pack_size $pack_align">;
+def OpReservedWritePipe: Op<277, (outs ID:$res), (ins TYPE: $t, ID: $pipe, ID: $res_id, ID:$idx, ID:$ptr, ID:$pack_size, ID:$pack_align), 
+	"$res = OpReservedWritePipe $t $pipe $res_id $idx $ptr $pack_size $pack_align">;
+def OpReserveReadPipePackets: Op<278, (outs ID:$res), (ins TYPE:$t, ID:$pipe, ID:$num_packs, ID:$pack_size, ID:$pack_align), 
+	"$res = OpReserveReadPipePackets $t $pipe $num_packs $pack_size $pack_align">;
+def OpReserveWritePipePackets: Op<279, (outs ID:$res), (ins TYPE:$t, ID:$pipe, ID:$num_packs, ID:$pack_size, ID:$pack_align), 
+	"$res = OpReserveWritePipePackets $t $pipe $num_packs $pack_size $pack_align">;
+def OpCommitReadPipe: Op<280, (outs), (ins ID:$pipe, ID:$res_id, ID:$pack_size, ID:$pack_align), 
+	"OpCommitReadPipe $pipe $res_id $pack_size $pack_align">;
+def OpCommitWritePipe: Op<281, (outs), (ins ID:$pipe, ID:$res_id, ID:$pack_size, ID:$pack_align), 
+	"OpCommitWritePipe $pipe $res_id $pack_size $pack_align">;
+def OpIsValidReserveId: Op<282, (outs ID:$res), (ins TYPE:$t,  ID:$res_id), "$res = OpIsValidReserveId $t $res_id">;
+def OpGetNumPipePackets: Op<283, (outs ID: $res), (ins TYPE:$t, ID:$pipe, ID:$pack_size, ID:$pack_align),
+	 "$res = OpGetNumPipePackets $t $pipe $pack_size $pack_align">;
+def OpGetMaxPipePackets: Op<284, (outs ID: $res), (ins TYPE:$t, ID:$pipe, ID:$pack_size, ID:$pack_align),
+	 "$res = OpGetMaxPipePackets $t $pipe $pack_size $pack_align">;
+def OpGroupReserveReadPipePackets: Op<285, (outs ID:$res), (ins TYPE:$t, ID:$exec, ID:$pipe, ID:$num_packs, ID:$pack_size, ID:$pack_align), 
+	"$res = OpGroupReserveReadPipePackets $t $exec $pipe $num_packs $pack_size $pack_align">;
+def OpGroupReserveWritePipePackets: Op<286, (outs ID:$res), (ins TYPE:$t, ID:$exec, ID:$pipe, ID:$num_packs, ID:$pack_size, ID:$pack_align), 
+	"$res = OpGroupReserveWritePipePackets $t $exec $pipe $num_packs $pack_size $pack_align">;
+def OpGroupCommitReadPipe: Op<287, (outs), (ins ID:$exec, ID:$pipe, ID:$res_packs, ID:$pack_size, ID:$pack_align), 
+	"OpGroupCommitReadPipe $exec $pipe $res_packs $pack_size $pack_align">;
+def OpGroupCommitWritePipe: Op<288, (outs), (ins ID:$exec, ID:$pipe, ID:$res_packs, ID:$pack_size, ID:$pack_align), 
+	"OpGroupCommitWritePipe $exec $pipe $res_packs $pack_size $pack_align">;
+def OpConstantPipeStorage: Op<323, (outs ID:$res), (ins TYPE:$t, i32imm:$pack_size, i32imm:$pack_align, i32imm:$capacity), 
+	"$res = OpConstantPipeStorage $t $pack_size $pack_size $pack_align $capacity">;	
+def OpCreatePipeFromPipeStorage: Op<324, (outs ID:$res), (ins TYPE:$t, ID:$pipe_storage), 
+	"$res = OpCreatePipeFromPipeStorage $t $pipe_storage">;
+def OpReadPipeBlockingINTEL: Op<5946, (outs ID:$res), (ins TYPE:$t, ID:$pack_size, ID:$pack_align), 
+	"$res = OpReadPipeBlockingINTEL $t $pack_size $pack_align">;
+def OpWritePipeBlockingINTEL: Op<5947, (outs ID:$res), (ins TYPE:$t, ID:$pack_size, ID:$pack_align), 
+	"$res = OpWritePipeBlockingINTEL $t $pack_size pack_align">;
+
+// 3.32.24. Non-Uniform Instructions
+
+def OpGroupNonUniformElect: Op<333, (outs ID: $res), (ins TYPE:$t, ID:$exec), 
+	"$res = OpGroupNonUniformElect $t $exec">;
+def OpGroupNonUniformAll: Op<334, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$pred), 
+	"$res = OpGroupNonUniformAll $t $exec $pred">;
+def OpGroupNonUniformAny: Op<335, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$pred), 
+	"$res = OpGroupNonUniformAny $t $exec $pred">;
+def OpGroupNonUniformAllEqual: Op<336, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value), 
+	"$res = OpGroupNonUniformAllEqual $t $exec $value">;
+def OpGroupNonUniformBroadcast: Op<337, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$id), 
+	"$res = OpGroupNonUniformBroadcast $t $exec $value $id">;
+def OpGroupNonUniformBroadcastFirst: Op<338, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value), 
+	"$res = OpGroupNonUniformBroadcastFirst $t $exec $value">;
+def OpGroupNonUniformBallot: Op<339, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$pred), 
+	"$res = OpGroupNonUniformBallot $t $exec $pred">;
+def OpGroupNonUniformInverseBallot: Op<340, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value), 
+	"$res = OpGroupNonUniformInverseBallot $t $exec $value">;
+def OpGroupNonUniformBallotBitExtract: Op<341, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$idx), 
+	"$res = OpGroupNonUniformBallotBitExtract $t $exec $value $idx">;
+def OpGroupNonUniformBallotBitCount: Op<342, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value), 
+	"$res = OpGroupNonUniformBallotBitCount $t $exec $op $value">;
+def OpGroupNonUniformBallotFindLSB: Op<343, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value), 
+	"$res = OpGroupNonUniformBallotFindLSB $t $exec $value">;
+def OpGroupNonUniformBallotFindMSB: Op<344, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value), 
+	"$res = OpGroupNonUniformBallotFindMSB $t $exec $value">;
+def OpGroupNonUniformShuffle: Op<345, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$id), 
+	"$res = OpGroupNonUniformShuffle $t $exec $value $id">;
+def OpGroupNonUniformShuffleXor: Op<346, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$mask), 
+	"$res = OpGroupNonUniformShuffleXor $t $exec $value $mask">;
+def OpGroupNonUniformShuffleUp: Op<347, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$delta), 
+	"$res = OpGroupNonUniformShuffleUp $t $exec $value $delta">;
+def OpGroupNonUniformShuffleDown: Op<348, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$delta), 
+	"$res = OpGroupNonUniformShuffleDown $t $exec $value $delta">;
+def OpGroupNonUniformIAdd: Op<349, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformIAdd $t $exec $op $value">;
+def OpGroupNonUniformFAdd: Op<350, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformFAdd $t $exec $op $value">;
+def OpGroupNonUniformIMul: Op<351, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformIMul $t $exec $op $value">;
+def OpGroupNonUniformFMul: Op<352, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformFMul $t $exec $op $value">;
+def OpGroupNonUniformSMin: Op<353, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformSMin $t $exec $op $value">;
+def OpGroupNonUniformUMin: Op<354, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformUMin $t $exec $op $value">;
+def OpGroupNonUniformFMin: Op<355, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformFMin $t $exec $op $value">;
+def OpGroupNonUniformSMax: Op<356, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformSMax $t $exec $op $value">;
+def OpGroupNonUniformUMax: Op<357, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformUMax $t $exec $op $value">;
+def OpGroupNonUniformFMax: Op<358, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformFMax $t $exec $op $value">;
+def OpGroupNonUniformBitwiseAnd: Op<359, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformBitwiseAnd $t $exec $op $value">;
+def OpGroupNonUniformBitwiseOr: Op<360, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformBitwiseOr $t $exec $op $value">;
+def OpGroupNonUniformBitwiseXor: Op<361, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformBitwiseXor $t $exec $op $value">;
+def OpGroupNonUniformLogicalAnd: Op<362, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformLogicalAnd $t $exec $op $value">;
+def OpGroupNonUniformLogicalOr: Op<363, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformLogicalOr $t $exec $op $value">;
+def OpGroupNonUniformLogicalXor: Op<364, (outs ID: $res), (ins TYPE:$t, ID:$exec, GroupOperation:$op, ID:$value, variable_ops), 
+	"$res = OpGroupNonUniformLogicalXor $t $exec $op $value">;
+def OpGroupNonUniformQuadBroadcast: Op<365, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$idx), 
+	"$res = OpGroupNonUniformQuadBroadcast $t $exec $value $idx">;
+def OpGroupNonUniformQuadSwap: Op<366, (outs ID: $res), (ins TYPE:$t, ID:$exec, ID:$value, ID:$direction), 
+	"$res = OpGroupNonUniformQuadSwap $t $exec $value $direction">;
+
+def OpGroupNonUniformPartitionNV: Op<5296, (outs ID: $res), (ins TYPE:$t, ID:$id), 
+	"$res = OpGroupNonUniformPartitionNV $t $id">;
+
+
+
 // and possibly 3.32.25. Reserved Instructions.
