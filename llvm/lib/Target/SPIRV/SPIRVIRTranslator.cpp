@@ -410,8 +410,7 @@ bool SPIRVIRTranslator::translateAtomicCmpXchg(const User &U,
   // of MIRBuilder.buildAtomicCmpXchgWithSuccess;
   const AtomicCmpXchgInst &I = cast<AtomicCmpXchgInst>(U);
 
-  if (I.isWeak())
-    return false;
+
 
   auto Flags = I.isVolatile() ? MachineMemOperand::MOVolatile
                               : MachineMemOperand::MONone;
@@ -426,10 +425,14 @@ bool SPIRVIRTranslator::translateAtomicCmpXchg(const User &U,
   Register Addr = getOrCreateVReg(*I.getPointerOperand());
   Register Cmp = getOrCreateVReg(*I.getCompareOperand());
   Register NewVal = getOrCreateVReg(*I.getNewValOperand());
-
+  MachineInstrBuilder instr;
+  if (I.isWeak()){
+	  instr = MIRBuilder.buildInstr(SPIRV::OpAtomicCompareExchangeWeak);
+  }else{
+	  instr = MIRBuilder.buildInstr(TargetOpcode::G_ATOMIC_CMPXCHG_WITH_SUCCESS);
+  }
   // Use buildInstr instead of buildAtomicCmpXchgWithSuccess to avoid asserts
-  MIRBuilder.buildInstr(TargetOpcode::G_ATOMIC_CMPXCHG_WITH_SUCCESS)
-      .addDef(OldValRes)
+      instr.addDef(OldValRes)
       .addDef(SuccessRes)
       .addUse(Addr)
       .addUse(Cmp)

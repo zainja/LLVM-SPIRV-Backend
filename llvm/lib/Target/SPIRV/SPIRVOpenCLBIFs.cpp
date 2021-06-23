@@ -266,6 +266,7 @@ static void buildIConstant(Register Reg, uint64_t Val, SPIRVType *type,
   auto &C = MIRBuilder.getMF().getFunction().getContext();
   const auto intTy = IntegerType::get(C, TR->getScalarOrVectorBitWidth(type));
   MIRBuilder.buildConstant(Reg, *ConstantInt::get(intTy, Val));
+
 }
 
 static Register buildIConstant(uint64_t Val, SPIRVType *type,
@@ -718,16 +719,22 @@ static bool genAtomicCmpXchg(MachineIRBuilder &MIRBuilder, Register resVReg,
   MRI->setType(expected, desiredLLT);
   Register tmp = MRI->createGenericVirtualRegister(desiredLLT);
   TR->assignSPIRVTypeToVReg(spvDesiredTy, tmp, MIRBuilder);
-  auto MIB = MIRBuilder.buildInstr(OpAtomicCompareExchange)
-                 .addDef(tmp)
-                 .addUse(TR->getSPIRVTypeID(retType))
-                 .addUse(objectPtr)
-                 .addUse(scopeReg)
-                 .addUse(memSemEqualReg)
-                 .addUse(memSemUnequalReg)
-                 .addUse(desired)
-                 .addUse(expected);
-  MIRBuilder.buildInstr(OpStore).addUse(expected).addUse(tmp);
+  MachineInstrBuilder MIB;
+  // Build OpAtomicCompareExchangeWeak
+  if(isWeak)
+	  MIB = MIRBuilder.buildInstr(OpAtomicCompareExchangeWeak);
+  else
+  MIB = MIRBuilder.buildInstr(OpAtomicCompareExchange);
+  // tmp = Op... use1 use2
+  MIB.addDef(tmp)
+     .addUse(TR->getSPIRVTypeID(TR->getOrCreateSPIRVIntegerType(32, MIRBuilder)))
+	 .addUse(objectPtr)
+	 .addUse(scopeReg)
+	 .addUse(memSemEqualReg)
+	 .addUse(memSemUnequalReg)
+	 .addUse(desired)
+	 .addUse(expected);
+  MIRBuilder.buildInstr(OpStore).addUse(expectedPtr).addUse(tmp);
   MIRBuilder.buildICmp(CmpInst::ICMP_EQ, resVReg, tmp, expected);
   return TR->constrainRegOperands(MIB);
 }
@@ -807,7 +814,7 @@ static bool genAtomicInstr(MachineIRBuilder &MIRBuilder,
     return genAtomicRMW(ret, retTy, OpAtomicAnd, MIRBuilder, args, TR);
   } else if (atomicStr[0] == 'm') {
     // TODO check the arg types for signedness
-    // if (atomicStr.startswith("min")) {
+	// if (atomicStr.startswith("min")) {
     //   return genAtomicRMW(ret, retTy, OpAtomicUMax, MIRBuilder, args, TR);
     // } else if (atomicStr.startswith("max")) {
     //   return genAtomicRMW(ret, retTy, OpAtomicUMax, MIRBuilder, args, TR);

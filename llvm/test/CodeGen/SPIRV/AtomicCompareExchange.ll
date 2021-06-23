@@ -12,10 +12,9 @@
 ; CHECK-SPIRV: %[[Value:[0-9]+]] = OpLoad %[[Int]] %[[Value_ptr]]
 ; CHECK-SPIRV: %[[Res:[0-9]+]] = OpAtomicCompareExchange %[[Int]] %[[Pointer]] %[[MemScope_Device]]
 ; CHECK-SPIRV-SAME:                  %[[MemSemEqual_SeqCst]] %[[MemSemUnequal_Acquire]] %[[Value]] %[[Comparator]]
-; CHECK-SPIRV: %[[Success:[0-9]+]] = OpIEqual %{{[0-9]+}} %[[Res]] %[[Comparator]]
-; CHECK-SPIRV: OpBranchConditional %[[Success]]
+; CHECK-SPIRV: %[[COND:[0-9]+]] = OpCompositeExtract %{{[0-9]+}} %{{[0-9]+}} 1
+; CHECK-SPIRV: OpBranchConditional %[[COND]] %{{[0-9]+}} %{{[0-9]+}}
 
-; CHECK-SPIRV: OpStore %[[Value_ptr]] %[[Res]]
 
 target datalayout = "e-p:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024"
 target triple = "spirv32-unknown-unknown"

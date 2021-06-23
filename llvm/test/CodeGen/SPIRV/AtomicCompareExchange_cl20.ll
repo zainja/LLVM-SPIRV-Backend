@@ -9,16 +9,15 @@ target triple = "spirv32-unknown-unknown"
 ; CHECK-NOT: OpCapability Int64Atomics
 
 ; CHECK: %[[int:[0-9]+]] = OpTypeInt 32 0
-; CHECK-DAG: %[[SequentiallyConsistent_MS:[0-9]+]] = OpConstant %[[int]] 16
-; CHECK-DAG: %[[DeviceScope:[0-9]+]] = OpConstant %[[int]] 1
-; CHECK-DAG: %[[int_ptr:[0-9]+]] = OpTypePointer Generic %[[int]]
-; CHECK-DAG: %[[bool:[0-9]+]] = OpTypeBool
+; CHECK: %[[int_ptr:[0-9]+]] = OpTypePointer Generic %[[int]]
+; CHECK: %[[bool:[0-9]+]] = OpTypeBool
 
-; Function Attrs: nounwind
-define spir_func void @test(i32 addrspace(4)* %object, i32 addrspace(4)* %expected, i32 %desired) #0 {
 ; CHECK: %[[object:[0-9]+]] = OpFunctionParameter %[[int_ptr]]
 ; CHECK: %[[expected:[0-9]+]] = OpFunctionParameter %[[int_ptr]]
 ; CHECK: %[[desired:[0-9]+]] = OpFunctionParameter %[[int]]
+; Function Attrs: nounwind
+define spir_func void @test(i32 addrspace(4)* %object, i32 addrspace(4)* %expected, i32 %desired) #0 {
+
 
 entry:
   %object.addr = alloca i32 addrspace(4)*, align 4
@@ -39,8 +38,11 @@ entry:
 ; CHECK: %[[Pointer:[0-9]+]] = OpLoad %[[int_ptr]] %[[object_addr]]
 ; CHECK: %[[exp:[0-9]+]] = OpLoad %[[int_ptr]] %[[expected_addr]]
 ; CHECK: %[[Value:[0-9]+]] = OpLoad %[[int]] %[[desired_addr]]
-; CHECK: %[[Comparator:[0-9]+]] = OpLoad %[[int]] %[[exp]]
-; CHECK-NEXT: %[[Result:[0-9]+]] = OpAtomicCompareExchange %[[int]] %[[Pointer]] %[[DeviceScope]] %[[SequentiallyConsistent_MS]] %[[SequentiallyConsistent_MS]] %[[Value]] %[[Comparator]]
+; CHECK: %[[SequentiallyConsistent_MS:[0-9]+]] = OpConstant %[[int]] 16
+; CHECK: %[[SequentiallyConsistent_MS_2:[0-9]+]] = OpConstant %[[int]] 16
+; CHECK: %[[DeviceScope:[0-9]+]] = OpConstant %[[int]] 1
+; CHECK: %[[Comparator:[0-9]+]] = OpLoad %[[int]] %[[exp]] Aligned 1
+; CHECK: %[[Result:[0-9]+]] = OpAtomicCompareExchange %[[int]] %[[Pointer]] %[[DeviceScope]] %[[SequentiallyConsistent_MS]] %[[SequentiallyConsistent_MS_2]] %[[Value]] %[[Comparator]]
   %call = call spir_func zeroext i1 @_Z30atomic_compare_exchange_strongPVU3AS4U7_AtomiciPU3AS4ii(i32 addrspace(4)* %0, i32 addrspace(4)* %1, i32 %2)
 ; CHECK-NEXT: OpStore %[[exp]] %[[Result]]
 ; CHECK-NEXT: %[[CallRes:[0-9]+]] = OpIEqual %[[bool]] %[[Result]] %[[Comparator]]
@@ -59,9 +61,12 @@ entry:
 ; CHECK: %[[Pointer:[0-9]+]] = OpLoad %[[int_ptr]] %[[object_addr]]
 ; CHECK: %[[exp:[0-9]+]] = OpLoad %[[int_ptr]] %[[expected_addr]]
 ; CHECK: %[[Value:[0-9]+]] = OpLoad %[[int]] %[[desired_addr]]
+; CHECK: %[[SequentiallyConsistent_MS_3:[0-9]+]] = OpConstant %[[int]] 16
+; CHECK: %[[SequentiallyConsistent_MS_4:[0-9]+]] = OpConstant %[[int]] 16
+; CHECK: %[[DeviceScope_2:[0-9]+]] = OpConstant %[[int]] 1
 ; CHECK: %[[ComparatorWeak:[0-9]+]] = OpLoad %[[int]] %[[exp]]
   %call2 = call spir_func zeroext i1 @_Z28atomic_compare_exchange_weakPVU3AS4U7_AtomiciPU3AS4ii(i32 addrspace(4)* %4, i32 addrspace(4)* %5, i32 %6)
-; CHECK-NEXT: %[[Result:[0-9]+]] = OpAtomicCompareExchangeWeak %[[int]] %[[Pointer]] %[[DeviceScope]] %[[SequentiallyConsistent_MS]] %[[SequentiallyConsistent_MS]] %[[Value]] %[[ComparatorWeak]]
+; CHECK-NEXT: %[[Result:[0-9]+]] = OpAtomicCompareExchangeWeak %[[int]] %[[Pointer]] %[[DeviceScope_2]] %[[SequentiallyConsistent_MS_3]] %[[SequentiallyConsistent_MS_4]] %[[Value]] %[[ComparatorWeak]]
 ; CHECK-NEXT: OpStore %[[exp]] %[[Result]]
 ; CHECK-NEXT: %[[CallRes:[0-9]+]] = OpIEqual %[[bool]] %[[Result]] %[[ComparatorWeak]]
 ; CHECK-NOT: %[[Result]]
