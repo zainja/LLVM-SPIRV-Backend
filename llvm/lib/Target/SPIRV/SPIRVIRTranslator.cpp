@@ -174,6 +174,9 @@ bool SPIRVIRTranslator::translateInst(const User &Inst, unsigned OpCode) {
   switch (OpCode) {
   case Instruction::GetElementPtr:
     return translateGetElementPtr(Inst, *CurBuilder.get());
+  case Instruction::Switch: {
+	  return translateSwitch(Inst, *CurBuilder.get());
+  }
   case Instruction::ShuffleVector:
     return translateShuffleVector(Inst, *CurBuilder.get());
   case Instruction::ExtractValue:
@@ -352,6 +355,30 @@ bool SPIRVIRTranslator::translateShuffleVector(const User &U,
     MIB.addImm(idx);
   }
   return TR->constrainRegOperands(MIB);
+}
+
+bool SPIRVIRTranslator::translateSwitch(const User &U, MachineIRBuilder &MIRBuilder) {
+
+	auto Switch = dyn_cast<SwitchInst>(&U);
+  MachineBasicBlock *SwitchMBB = &getMBB(*Switch->getParent());
+
+	auto SelectorVReg = getOrCreateVReg(*Switch->getCondition());
+	auto DefaultBlock = &getMBB(*Switch->getDefaultDest());
+  SwitchMBB->addSuccessor(DefaultBlock);
+	auto MIB = MIRBuilder.buildInstr(SPIRV::OpSwitch)
+				.addUse(SelectorVReg)
+				.addMBB(DefaultBlock);
+
+	auto iter = Switch->cases();
+	for(auto &elem: iter){
+		auto caseValue = elem.getCaseValue()->getSExtValue();
+		MIB.addImm(caseValue);
+		MachineBasicBlock* caseBlock = &getMBB(*elem.getCaseSuccessor());
+		MIB.addMBB(caseBlock);
+		SwitchMBB->addSuccessor(caseBlock);
+	}
+	return TR->constrainRegOperands(MIB);
+
 }
 
 bool SPIRVIRTranslator::translateExtractValue(const User &U,

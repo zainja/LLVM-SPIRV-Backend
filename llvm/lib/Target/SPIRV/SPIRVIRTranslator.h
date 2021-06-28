@@ -47,6 +47,8 @@ protected:
   // Translate to OpVectorShuffle instead of turning indices into const vector.
   bool translateShuffleVector(const User &U, MachineIRBuilder &MIRBuilder);
 
+
+  bool translateSwitch(const User &U, MachineIRBuilder &MIRBuilder);
   // Translate to OpCompositeExtract instead of flattening indices
   bool translateExtractValue(const User &U, MachineIRBuilder &MIRBuilder);
 

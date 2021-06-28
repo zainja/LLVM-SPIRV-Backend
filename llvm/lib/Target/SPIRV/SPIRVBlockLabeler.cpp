@@ -107,7 +107,7 @@ bool SPIRVBlockLabeler::runOnMachineFunction(MachineFunction &MF) {
   MIRBuilder.setMF(MF);
 
   std::map<MBB_ID, Register> bbNumToLabelMap;
-  SmallVector<MachineInstr *, 4> branches, condBranches, phis;
+  SmallVector<MachineInstr *, 4> branches, condBranches, phis, switches ;
 
   for (MachineBasicBlock &MBB : MF) {
     // Add the missing OpLabel in the right place
@@ -126,6 +126,8 @@ bool SPIRVBlockLabeler::runOnMachineFunction(MachineFunction &MF) {
         condBranches.push_back(&MI);
       } else if (MI.getOpcode() == OpPhi) {
         phis.push_back(&MI);
+      } else if (MI.getOpcode() == OpSwitch){
+    	  switches.push_back(&MI);
       }
     }
 
@@ -143,6 +145,25 @@ bool SPIRVBlockLabeler::runOnMachineFunction(MachineFunction &MF) {
     Register bbID = getLabelIDForMBB(bbNumToLabelMap, bbNum);
     auto MIB = MIRBuilder.buildInstrNoInsert(OpBranch).addUse(bbID);
     replaceInstr(branch, MIB, MIRBuilder);
+  }
+
+  for (const auto &opSwitch : switches){
+	  auto MIB = MIRBuilder.buildInstrNoInsert(OpSwitch)
+			  .addUse(opSwitch->getOperand(0).getReg());
+	   // all the odd values are the Machine blocks
+	  for (unsigned i = 1; i < opSwitch->getNumOperands(); i+=1){
+		 if(i % 2 == 0){
+			 MIB.addImm(opSwitch->getOperand(i).getImm());
+		 }else{
+			 auto swNum = getMBBID(opSwitch->getOperand(i));
+			 Register swID = getLabelIDForMBB(bbNumToLabelMap, swNum);
+			 MIB.addUse(swID);
+		 }
+
+	  }
+
+	  replaceInstr(opSwitch, MIB, MIRBuilder);
+
   }
 
   // Replace MBB references with label IDs in OpBranchConditional instructions
