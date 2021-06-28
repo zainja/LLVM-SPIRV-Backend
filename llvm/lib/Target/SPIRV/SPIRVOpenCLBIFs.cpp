@@ -380,7 +380,6 @@ static bool genWorkgroupQuery(MachineIRBuilder &MIRBuilder, Register resVReg,
 
       Register cmpReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
       TR->assignSPIRVTypeToVReg(boolTy, cmpReg, MIRBuilder);
-
       // Use G_ICMP to check if idxVReg < 3
       Register three = buildIConstant(3, idxTy, MIRBuilder, TR);
       MIRBuilder.buildICmp(CmpInst::ICMP_ULT, cmpReg, idxVReg, three);
@@ -568,6 +567,7 @@ static bool genGlobalLocalQuery(MachineIRBuilder &MIRBuilder,
                                 Register ret, SPIRVType *retTy,
                                 const SmallVectorImpl<Register> &args,
                                 SPIRVTypeRegistry *TR) {
+  llvm::outs() << "Global Local Query: " << globLocStr;
   if (globLocStr.startswith("id")) {
     auto BI = global ? BuiltIn::GlobalInvocationId : BuiltIn::LocalInvocationId;
     return genWorkgroupQuery(MIRBuilder, ret, retTy, args, TR, BI, 0);
@@ -1004,6 +1004,48 @@ static bool genOpenCLExtInst(OpenCL_std::OpenCL_std extInstID,
   return TR->constrainRegOperands(MIB);
 }
 
+static bool genFOrdGreatherThanEqualBool(MachineIRBuilder &MIRBuilder, Register resVReg,
+        SPIRVType *retType,
+        const SmallVectorImpl<Register> &OrigArgs,
+        SPIRVTypeRegistry *TR){
+
+   Register op1 = OrigArgs[0];
+   Register op2 = OrigArgs[1];
+
+   auto MIB = MIRBuilder.buildInstr(SPIRV::OpFOrdGreaterThanEqual)
+				   .addDef(resVReg)
+				   .addUse(TR->getSPIRVTypeID(retType))
+				   .addUse(op1)
+				   .addUse(op2);
+
+   return TR->constrainRegOperands(MIB);
+
+}
+
+static bool genFOrdGreatherThanEqualInt(MachineIRBuilder &MIRBuilder, Register resVReg,
+        SPIRVType *retType,
+        const SmallVectorImpl<Register> &OrigArgs,
+        SPIRVTypeRegistry *TR){
+
+	const auto MRI = MIRBuilder.getMRI();
+	Register op1 = OrigArgs[0];
+	Register op2 = OrigArgs[1];
+    auto compare = MRI->createVirtualRegister(&SPIRV::IDRegClass);
+    TR->assignSPIRVTypeToVReg(TR->getOrCreateSPIRVIntegerType(32, MIRBuilder), compare, MIRBuilder);
+    MRI->setType(compare, LLT::scalar(32));
+	auto ptr = MIRBuilder.buildInstr(SPIRV::OpFOrdGreaterThanEqual)
+				   .addDef(compare)
+				   .addUse(TR->getSPIRVTypeID(TR->getOrCreateSPIRVBoolType(MIRBuilder)))
+				   .addUse(op1)
+				   .addUse(op2);
+	bool succ = TR->constrainRegOperands(ptr);
+
+	Register trueCond = buildIConstant(1, retType, MIRBuilder, TR);
+	Register falseCond = buildIConstant(0, retType, MIRBuilder, TR);
+	MIRBuilder.buildSelect(resVReg, compare, trueCond, falseCond);
+	return succ;
+
+}
 bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
                                      MachineIRBuilder &MIRBuilder,
                                      Register OrigRet, const Type *OrigRetTy,
@@ -1111,6 +1153,10 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
       llvm_unreachable("not implemented");
     break;
   }
+  case 'i':
+	  if(nameNoArgs.startswith("isgreaterequal"))
+		return genFOrdGreatherThanEqualInt(MIRBuilder, OrigRet, retTy, args, TR);
+	  break;
   case 'r':
     if (nameNoArgs.startswith("read_image")) {
       if (args.size() > 2)
@@ -1128,6 +1174,8 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
   case '_':
     if (nameNoArgs.startswith("__translate_sampler_initializer"))
       return buildSamplerLiteral(args[0], OrigRet, retTy, MIRBuilder, TR);
+    if (nameNoArgs.startswith("__spirv_FOrdGreaterThanEqual"))
+	  return genFOrdGreatherThanEqualBool(MIRBuilder, OrigRet, retTy, args, TR);
     break;
   default:
     break;
