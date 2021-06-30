@@ -413,6 +413,8 @@ bool SPIRVInstructionSelector::spvSelect(Register resVReg,
     return selectUnOp(resVReg, resType, I, MIRBuilder, OpConvertUToPtr);
   case TargetOpcode::G_BITCAST:
     return selectUnOp(resVReg, resType, I, MIRBuilder, OpBitcast);
+  case TargetOpcode::G_BITREVERSE:
+    return selectUnOp(resVReg, resType, I, MIRBuilder, OpBitReverse);
   case TargetOpcode::G_ADDRSPACE_CAST:
     return selectAddrSpaceCast(resVReg, resType, I, MIRBuilder);
 

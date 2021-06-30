@@ -175,7 +175,9 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
       LegalityPredicate(([=](const LegalityQuery &Query) {
         return Query.Types[0].getSizeInBits() == Query.Types[1].getSizeInBits();
       }))));
-
+  getActionDefinitionsBuilder(G_BITREVERSE).legalIf(all(
+      typeInSet(0, allIntScalarsAndVectors),
+      typeInSet(0, allIntScalarsAndVectors)));
   // getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
   //     .legalIf(all(typeInSet(0, allVectors), typeInSet(1, allScalars),
   //                  typeInSet(2, allIntScalars),

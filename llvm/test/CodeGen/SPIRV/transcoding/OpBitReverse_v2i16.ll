@@ -1,8 +1,11 @@
-; RUN: llc -O0 -global-isel %s -o - | FileCheck %s --check-prefix=CHECK-SPIRV
+; RUN: llc -O0 -global-isel %s -o - | FileCheck %s
 
-; CHECK-SPIRV: %[[short:[0-9]+]] = OpTypeInt 16
-; CHECK-SPIRV: %[[short2:[0-9]+]] = OpTypeVector %[[short]] 2
-; CHECK-SPIRV: %[[short2]] = OpBitReverse
+; CHECK: %[[short:[0-9]+]] = OpTypeInt 16
+; CHECK: %[[short2:[0-9]+]] = OpTypeVector %[[short]] 2
+; CHECK: %[[bits:[0-9]+]] = OpFunctionParameter %[[short2]]
+; CHECK: %[[bits2:[0-9]+]] = OpFunctionParameter %[[short2]]
+; CHECK: %[[bits3:[0-9]+]] = OpFunctionParameter %[[short2]]
+; CHECK: %{{[0-9]+}} = OpBitReverse %[[short2]] %[[bits2]]
 
 target datalayout = "e-p:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024"
 target triple = "spirv32-unknown-unknown"
