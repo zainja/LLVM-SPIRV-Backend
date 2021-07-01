@@ -148,9 +148,12 @@ static Register buildSamplerLiteral(uint64_t samplerBitmask,
 
 static bool decorate(Register target, Decoration::Decoration decoration,
                      MachineIRBuilder &MIRBuilder, SPIRVTypeRegistry *TR) {
+  llvm::outs() << "meta" << target << " " <<
+      " Decoration " << decoration << "\n";
   auto MIB = MIRBuilder.buildInstr(SPIRV::OpDecorate)
                  .addUse(target)
                  .addImm(decoration);
+  llvm::outs() << *MIB.getInstr() << "\n";
   return TR->constrainRegOperands(MIB);
 }
 
@@ -567,7 +570,6 @@ static bool genGlobalLocalQuery(MachineIRBuilder &MIRBuilder,
                                 Register ret, SPIRVType *retTy,
                                 const SmallVectorImpl<Register> &args,
                                 SPIRVTypeRegistry *TR) {
-  llvm::outs() << "Global Local Query: " << globLocStr;
   if (globLocStr.startswith("id")) {
     auto BI = global ? BuiltIn::GlobalInvocationId : BuiltIn::LocalInvocationId;
     return genWorkgroupQuery(MIRBuilder, ret, retTy, args, TR, BI, 0);
@@ -1004,6 +1006,32 @@ static bool genOpenCLExtInst(OpenCL_std::OpenCL_std extInstID,
   return TR->constrainRegOperands(MIB);
 }
 
+static bool genVops(OpenCL_std::OpenCL_std extInstID, MachineIRBuilder &MIRBuilder, Register resVReg,
+        SPIRVType *retType,
+        const SmallVectorImpl<Register> &OrigArgs,
+        SPIRVTypeRegistry *TR, bool isStore, int n){
+  const auto MRI = MIRBuilder.getMRI();
+  if (isStore){
+    resVReg = MRI->createVirtualRegister(&SPIRV::IDRegClass);
+    auto voidTy = Type::getVoidTy(MIRBuilder.getMF().getFunction().getContext());
+    retType = TR->assignTypeToVReg(voidTy, resVReg, MIRBuilder);
+  }
+  MachineInstrBuilder MIB = MIRBuilder.buildInstr(SPIRV::OpExtInst)
+      .addDef(resVReg)
+      .addUse(TR->getSPIRVTypeID(retType))
+      .addImm(static_cast<uint32_t>(ExtInstSet::OpenCL_std))
+      .addImm(extInstID);
+  for (const auto &arg : OrigArgs) {
+    MIB.addUse(arg);
+  }
+  if (n != -1){
+    MIB.addImm(n);
+  }
+
+ return TR->constrainRegOperands(MIB);
+
+}
+
 static bool genFOrdGreatherThanEqualBool(MachineIRBuilder &MIRBuilder, Register resVReg,
         SPIRVType *retType,
         const SmallVectorImpl<Register> &OrigArgs,
@@ -1030,9 +1058,9 @@ static bool genFOrdGreatherThanEqualInt(MachineIRBuilder &MIRBuilder, Register r
 	const auto MRI = MIRBuilder.getMRI();
 	Register op1 = OrigArgs[0];
 	Register op2 = OrigArgs[1];
-    auto compare = MRI->createVirtualRegister(&SPIRV::IDRegClass);
-    TR->assignSPIRVTypeToVReg(TR->getOrCreateSPIRVIntegerType(32, MIRBuilder), compare, MIRBuilder);
-    MRI->setType(compare, LLT::scalar(32));
+  auto compare = MRI->createVirtualRegister(&SPIRV::IDRegClass);
+  TR->assignSPIRVTypeToVReg(TR->getOrCreateSPIRVIntegerType(32, MIRBuilder), compare, MIRBuilder);
+  MRI->setType(compare, LLT::scalar(32));
 	auto ptr = MIRBuilder.buildInstr(SPIRV::OpFOrdGreaterThanEqual)
 				   .addDef(compare)
 				   .addUse(TR->getSPIRVTypeID(TR->getOrCreateSPIRVBoolType(MIRBuilder)))
@@ -1051,7 +1079,6 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
                                      Register OrigRet, const Type *OrigRetTy,
                                      const SmallVectorImpl<Register> &args,
                                      SPIRVTypeRegistry *TR) {
-  LLVM_DEBUG(dbgs() << "Generating OpenCL Builtin: " << demangledName << "\n");
 
   SPIRVType *retTy = nullptr;
   if (OrigRetTy && !OrigRetTy->isVoidTy())
@@ -1165,6 +1192,22 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
         return genReadImage(MIRBuilder, OrigRet, retTy, args, TR);
     }
     break;
+  case 'v':{
+    namespace CL = OpenCL_std;
+    int val = -1;
+    if(nameNoArgs.endswith("2")) val = 2;
+    else if(nameNoArgs.endswith("4")) val = 4;
+    else if(nameNoArgs.endswith("8")) val = 8;
+    else if(nameNoArgs.endswith("16")) val = 16;
+
+    if (nameNoArgs.startswith("vload"))
+      return genVops(CL::vloadn, MIRBuilder, OrigRet, retTy, args, TR, false, val);
+    else if(nameNoArgs.startswith("vstore"))
+      return genVops(CL::vstoren, MIRBuilder, OrigRet, retTy, args, TR, true, -1);
+
+  }
+
+  break;
   case 'w':
     if (nameNoArgs.startswith("write_image"))
       return genWriteImage(MIRBuilder, args, TR);
