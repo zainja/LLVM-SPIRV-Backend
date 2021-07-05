@@ -241,3 +241,18 @@ unsigned SPIRVInstrInfo::insertBranch(
     *BytesAdded = bytesAdded;
   return instsAdded;
 }
+
+void SPIRVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
+    llvm::MachineBasicBlock::iterator MI, const DebugLoc &DL,
+    MCRegister DestReg, MCRegister SrcReg,
+    bool KillSrc) const {
+
+  MachineIRBuilder MIRBuilder;
+  MIRBuilder.setMF(*MBB.getParent());
+  MIRBuilder.setMBB(MBB);
+  const auto MRI = MIRBuilder.getMRI();
+  MRI->replaceRegWith(SrcReg, DestReg);
+}
+
+
+
