@@ -148,12 +148,9 @@ static Register buildSamplerLiteral(uint64_t samplerBitmask,
 
 static bool decorate(Register target, Decoration::Decoration decoration,
                      MachineIRBuilder &MIRBuilder, SPIRVTypeRegistry *TR) {
-  llvm::outs() << "meta" << target << " " <<
-      " Decoration " << decoration << "\n";
   auto MIB = MIRBuilder.buildInstr(SPIRV::OpDecorate)
                  .addUse(target)
                  .addImm(decoration);
-  llvm::outs() << *MIB.getInstr() << "\n";
   return TR->constrainRegOperands(MIB);
 }
 
@@ -918,44 +915,54 @@ static bool genConvertInstr(MachineIRBuilder &MIRBuilder,
   }
 
   namespace Dec = Decoration;
-  bool success = true;
-  if (isSat)
-    success &= decorate(ret, Dec::SaturatedConversion, MIRBuilder, TR);
-  if (isRounded && success)
-    success &= decorate(ret, Dec::FPRoundingMode, roundingMode, MIRBuilder, TR);
-  if (!success)
-    return false;
 
+
+  MachineInstrBuilder MIB;
   if (isFromInt) {
     if (isToInt) { // I -> I
       auto op = dstSign ? OpUConvert : OpSConvert;
       op = !isSat ? op : (dstSign ? OpSatConvertUToS : OpSatConvertSToU);
-      auto MIB = MIRBuilder.buildInstr(dstSign ? OpUConvert : OpSConvert)
+      MIB = MIRBuilder.buildInstr(dstSign ? OpUConvert : OpSConvert)
                      .addDef(ret)
                      .addUse(TR->getSPIRVTypeID(retTy))
                      .addUse(src);
-      return TR->constrainRegOperands(MIB);
     } else if (isToFloat) { // I -> F
-      auto MIB = MIRBuilder.buildInstr(srcSign ? OpConvertSToF : OpConvertUToF)
+      MIB = MIRBuilder.buildInstr(srcSign ? OpConvertSToF : OpConvertUToF)
                      .addDef(ret)
                      .addUse(TR->getSPIRVTypeID(retTy))
                      .addUse(src);
-      return TR->constrainRegOperands(MIB);
     }
+    bool success = true;
+      if (isSat){
+        success &= decorate(ret, Dec::SaturatedConversion, MIRBuilder, TR);
+
+      }
+      if (isRounded && success){
+        success &= decorate(ret, Dec::FPRoundingMode, roundingMode, MIRBuilder, TR);
+     }
+    return success & TR->constrainRegOperands(MIB);
   } else if (isFromFloat) {
     if (isToInt) { // F -> I
-      auto MIB = MIRBuilder.buildInstr(dstSign ? OpConvertFToS : OpConvertFToU)
+      MIB = MIRBuilder.buildInstr(dstSign ? OpConvertFToS : OpConvertFToU)
                      .addDef(ret)
                      .addUse(TR->getSPIRVTypeID(retTy))
                      .addUse(src);
-      return TR->constrainRegOperands(MIB);
     } else if (isToFloat) { // F -> F
-      auto MIB = MIRBuilder.buildInstr(OpFConvert)
+      MIB = MIRBuilder.buildInstr(OpFConvert)
                      .addDef(ret)
                      .addUse(TR->getSPIRVTypeID(retTy))
                      .addUse(src);
-      return TR->constrainRegOperands(MIB);
     }
+
+    bool success = true;
+    if (isSat){
+      success &= decorate(ret, Dec::SaturatedConversion, MIRBuilder, TR);
+
+    }
+    if (isRounded && success){
+      success &= decorate(ret, Dec::FPRoundingMode, roundingMode, MIRBuilder, TR);
+    }
+    return success & TR->constrainRegOperands(MIB);
   }
 
   report_fatal_error("Convert instr not implemented yet: " + convertStr);

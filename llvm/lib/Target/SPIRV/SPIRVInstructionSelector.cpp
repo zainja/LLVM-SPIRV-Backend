@@ -1114,9 +1114,9 @@ bool SPIRVInstructionSelector::selectExt(Register resVReg,
                         : OpSelectSIVCond)
         .addDef(resVReg)
         .addUse(TR.getSPIRVTypeID(resType))
+        .addUse(I.getOperand(1).getReg())
         .addUse(oneReg)
         .addUse(zeroReg)
-        .addUse(I.getOperand(1).getReg())
         .constrainAllUses(TII, TRI, RBI);
   } else {
     return selectUnOp(resVReg, resType, I, MIRBuilder,

@@ -210,8 +210,7 @@ SPIRVLegalizerInfo::SPIRVLegalizerInfo(const SPIRVSubtarget &ST) {
                      LLT retTy = Query.Types[0];
                      LLT cmpTy = Query.Types[1];
                      if (retTy.isVector())
-                       return cmpTy.isVector() &&
-                              retTy.getNumElements() == cmpTy.getNumElements();
+                       return true;
                      else
                        return cmpTy.isScalar() ||
                               (cmpTy.isPointer() &&
