@@ -154,6 +154,42 @@ static void addHeaderOps(Module &M, MachineIRBuilder &MIRBuilder,
   reqs.addRequirements(getSourceLanguageRequirements(srcLang, ST));
 }
 
+static void addExecutionModeHeaders(Module &M, MachineModuleInfo &MMI, MachineIRBuilder &MIRBuilder){
+  setMetaBlock(MIRBuilder, MB_ExecutionModes);
+  // check if it is not null
+  if(NamedMDNode* execNode = M.getNamedMetadata("spirv.ExecutionMode")){
+
+    // for each operand
+    for(auto ops : execNode->operands()){
+      auto &op = ops->getOperand(0);
+      auto func = mdconst::extract<Function>(op);
+
+      unsigned execNum = getMetadataUInt(ops, 1);
+      SmallVector<unsigned, 4> literals;
+      uint32_t executionMode = ExecutionMode::ExecutionMode(execNum);
+      for (unsigned i = 2; i < ops->getNumOperands(); i ++){
+        literals.push_back(getMetadataUInt(ops, i));
+      }
+      auto globalFunction = MMI.getMachineFunction(*M.getFunction("GlobalStuff"));
+      MachineBasicBlock &MBB = *globalFunction->getBlockNumbered(MB_EntryPoints);
+      for (MachineInstr &MI: MBB) {
+        if(MI.getOpcode() == SPIRV::OpEntryPoint){
+          std::string funcName = getStringImm(MI, 2);
+          if(func->getName().str() == funcName){
+            Register entryPoint = MI.getOperand(1).getReg();
+            auto I = MIRBuilder.buildInstr(SPIRV::OpExecutionMode)
+                        .addUse(entryPoint)
+                        .addImm(executionMode);
+            for(auto literal : literals){
+              I.addImm(literal);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 // Create a new Function and MachineFunction for the given MachineIRBuilder to
 // add meta-instructions to. It should have a series of empty basic blocks, one
 // for each required SPIR-V module section, so that subsequent users of the
@@ -738,6 +774,8 @@ bool SPIRVGlobalTypesAndRegNum::runOnModule(Module &M) {
   }
 
   addGlobalRequirements(reqs, ST, MIRBuilder);
+
+  addExecutionModeHeaders(M, MMIWrapper.getMMI(), MIRBuilder);
 
   return false;
 }
