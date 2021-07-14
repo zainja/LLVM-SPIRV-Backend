@@ -441,6 +441,25 @@ static bool genSampledReadImage(MachineIRBuilder &MIRBuilder, Register resVReg,
   return TR->constrainRegOperands(MIB);
 }
 
+
+static bool genSampledExplicitLodImage(MachineIRBuilder &MIRBuilder, Register resVReg,
+                                SPIRVType *retType,
+                                const SmallVectorImpl<Register> &OrigArgs,
+                                SPIRVTypeRegistry *TR) {
+
+
+  Register lod = buildConstantFZero(MIRBuilder, TR);
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpImageSampleExplicitLod)
+                   .addDef(resVReg)
+                   .addUse(TR->getSPIRVTypeID(retType))
+                   .addUse(OrigArgs[0])
+                   .addUse(OrigArgs[1])
+                   .addImm(ImageOperand::Lod)
+                   .addUse(lod);
+  return TR->constrainRegOperands(MIB);
+
+}
+
 static bool genReadImage(MachineIRBuilder &MIRBuilder, Register resVReg,
                          SPIRVType *retType,
                          const SmallVectorImpl<Register> &OrigArgs,
@@ -1046,7 +1065,6 @@ static bool genFOrdGreatherThanEqualBool(MachineIRBuilder &MIRBuilder, Register 
 
    Register op1 = OrigArgs[0];
    Register op2 = OrigArgs[1];
-
    auto MIB = MIRBuilder.buildInstr(SPIRV::OpFOrdGreaterThanEqual)
 				   .addDef(resVReg)
 				   .addUse(TR->getSPIRVTypeID(retType))
@@ -1079,6 +1097,35 @@ static bool genFOrdGreatherThanEqualInt(MachineIRBuilder &MIRBuilder, Register r
 	Register falseCond = buildIConstant(0, retType, MIRBuilder, TR);
 	MIRBuilder.buildSelect(resVReg, compare, trueCond, falseCond);
 	return succ;
+
+}
+
+static bool genSampledImage(MachineIRBuilder &MIRBuilder, Register resVReg,
+    SPIRVType *retType,
+    const SmallVectorImpl<Register> &OrigArgs,
+    SPIRVTypeRegistry *TR){
+
+  const auto MRI = MIRBuilder.getMRI();
+  // Get the image the register 0 points to a OpFunctionParameter which holds the actual image
+  Register imageParam = OrigArgs[0];
+  auto image = MRI->getVRegDef(imageParam)->getOperand(1).getReg();
+
+  // now we create the OpTypeSampledImage
+  // 1. create a virtual register
+  Register ty = MRI->createVirtualRegister(&SPIRV::IDRegClass);
+  // 2. ensure type is correct
+  MRI->setType(ty, LLT::scalar(32));
+  // 3. create OpTypeSampledImage
+  auto sampleType = MIRBuilder.buildInstr(SPIRV::OpTypeSampledImage)
+      .addDef(ty)
+      .addUse(image);
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpSampledImage)
+      .addDef(resVReg)
+      .addUse(ty)
+      .addUse(OrigArgs[0])
+      .addUse(OrigArgs[1]);
+  return TR->constrainRegOperands(MIB);
+
 
 }
 bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
@@ -1135,7 +1182,6 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
       return genOpenCLExtInst(extInstId, MIRBuilder, OrigRet, retTy, args, TR);
     }
   }
-
   char firstChar = nameNoArgs[0];
   switch (firstChar) {
   case 'a':
@@ -1163,6 +1209,11 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
     if (nameNoArgs.startswith("dot"))
       return genDotOrFMul(OrigRet, retTy, MIRBuilder, args, TR);
     break;
+  case 'f': {
+    if(nameNoArgs.startswith("float vector[4] __spirv_ImageSampleExplicitLod"))
+      return genSampledExplicitLodImage(MIRBuilder, OrigRet, retTy, args, TR);
+    break;
+  }
   case 'g': {
     bool local = nameNoArgs.startswith("get_local_");
     bool global = !local && nameNoArgs.startswith("get_global_");
@@ -1211,10 +1262,11 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
       return genVops(CL::vloadn, MIRBuilder, OrigRet, retTy, args, TR, false, val);
     else if(nameNoArgs.startswith("vstore"))
       return genVops(CL::vstoren, MIRBuilder, OrigRet, retTy, args, TR, true, -1);
-
+    else if (nameNoArgs.startswith("void* __spirv_SampledImage"))
+          return genSampledImage(MIRBuilder, OrigRet, retTy, args, TR);
+    break;
   }
 
-  break;
   case 'w':
     if (nameNoArgs.startswith("write_image"))
       return genWriteImage(MIRBuilder, args, TR);
@@ -1225,7 +1277,8 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
     if (nameNoArgs.startswith("__translate_sampler_initializer"))
       return buildSamplerLiteral(args[0], OrigRet, retTy, MIRBuilder, TR);
     if (nameNoArgs.startswith("__spirv_FOrdGreaterThanEqual"))
-	  return genFOrdGreatherThanEqualBool(MIRBuilder, OrigRet, retTy, args, TR);
+      return genFOrdGreatherThanEqualBool(MIRBuilder, OrigRet, retTy, args, TR);
+
     break;
   default:
     break;
