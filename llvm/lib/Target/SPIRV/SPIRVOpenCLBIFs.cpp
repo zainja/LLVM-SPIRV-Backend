@@ -1039,7 +1039,10 @@ static bool genFOrdGreatherThanEqualBool(MachineIRBuilder &MIRBuilder, Register 
 
    Register op1 = OrigArgs[0];
    Register op2 = OrigArgs[1];
+   const auto MRI = MIRBuilder.getMRI();
 
+   auto MInst = MRI->getVRegDef(resVReg);
+   llvm::outs() << "\t MIST \t" << *MInst << "\t Opcode: " << MInst->getOpcode();
    auto MIB = MIRBuilder.buildInstr(SPIRV::OpFOrdGreaterThanEqual)
 				   .addDef(resVReg)
 				   .addUse(TR->getSPIRVTypeID(retType))
