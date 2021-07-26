@@ -1,4 +1,4 @@
-class OpenCLBuiltinsMap <string _opencl_mangled, int  _opcode_target> {
+class OpenCLBuiltinsMap <string _opencl_mangled, int  _opcode_target=0> {
 	string opencl_mangled = _opencl_mangled;
 	int opcode_target = _opcode_target;
 }
