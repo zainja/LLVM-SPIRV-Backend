@@ -144,7 +144,7 @@ string SPIRVOpenCLBuiltinsEmitter::emitSelectRecord(OCLFunction function){
   string caseBody;
   raw_string_ostream SS(caseBody);
   SS << "{\n";
-  SS << "  Register* operands ["<< function.instrList.size() <<"];\n";
+  SS << "  Register operands ["<< function.instrList.size() <<"];\n";
   int count = 0;
   for(auto instrs: function.instrList){
 
@@ -173,7 +173,7 @@ string SPIRVOpenCLBuiltinsEmitter::emitSelectRecord(OCLFunction function){
       else if (operandType == "ImmType")
         SS << "  M" << count << ".addImm( " << operand->getValueAsInt("val") << ");\n";
       else if (operandType == "ImmReg"){
-        SS << "  M" << count << ".addUse(*operands[" << operand->getValueAsInt("Index") << "]);\n";
+        SS << "  M" << count << ".addUse(operands[" << operand->getValueAsInt("Index") << "]);\n";
       }
     }
     if(!isVoid) SS << "  operands["<< count <<"] = M" << count << ".getInstr()->getOperand(0).getReg();\n";
