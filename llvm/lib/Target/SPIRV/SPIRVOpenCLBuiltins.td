@@ -52,10 +52,20 @@ class OCLPair<Op _instr, list<Type> _Args>{
   list<Type> Args = _Args;
 }
 class OCLBuiltinMapping<string _opencl_name, list<OCLPair> _InstrList> {
-	string opencl_name = _opencl_name;
-	list<OCLPair> InstrList = _InstrList;
+  string opencl_name = _opencl_name;
+  list<OCLPair> InstrList = _InstrList;
 }
 
+// Function should be in SPIRVOpenCLBifs.cpp and
+// it should have the format bool func(StringRef name, MachineIRBuilder &MIRBuilder, Register OrigRet, 
+// const SPIRVType *retTy, const SmallVectorImpl<Register> &args,
+//      "SPIRVTypeRegistry *TR)
+// function should return a boolean
+// you need to put the function name only
+class OCLBuiltinFunctionMapping<string _opencl_name, string _function> {
+  string opencl_name = _opencl_name;
+  string function = _function;
+}
 def Arg0 : OCLOperand<0>;
 def Arg1 : OCLOperand<1>;
 def acos : ImmType<17>;
@@ -73,7 +83,6 @@ def pfor1 : OCLPair<OpFOrdGreaterThanEqual, [im1, boolRet, Arg0, Arg1]>;
 def inter1: ImmReg<0>;
 def pfor2 : OCLPair<OpUndef, [return, defaultReturnType, inter1, ImmType<1>, ImmType<0>]>;
 def: OCLBuiltinMapping<"fordgreaterthanint", [pfor1, pfor2]>;
-
 
 
 

@@ -45,6 +45,7 @@ class SPIRVOpenCLBuiltinsEmitter {
 private:
   RecordKeeper &Records;
   vector<OCLFunction> mappingsList;
+  vector<pair<StringRef, StringRef>> functionMappingList;
   void getOCLFunctions();
   void emitStringMatcher(raw_ostream &OS);
   string emitSelectRecord(OCLFunction function);
@@ -73,6 +74,12 @@ void SPIRVOpenCLBuiltinsEmitter::getOCLFunctions() {
     }
     mappingsList.push_back({oclFunctionName, operandsMap});
   }
+  auto OCLFunctionMapRecords = Records.getAllDerivedDefinitions("OCLBuiltinFunctionMapping");
+  for(auto const &record: OCLFunctionMapRecords){
+    StringRef oclFunctionName = record->getValueAsString("opencl_name");
+    StringRef functionName = record->getValueAsString("function");
+    functionMappingList.push_back({oclFunctionName, functionName});
+  }
 
 }
 
@@ -81,6 +88,13 @@ void SPIRVOpenCLBuiltinsEmitter::emitStringMatcher(raw_ostream &OS) {
   for (auto &func : mappingsList) {
     validOCLFunctions.push_back(StringMatcher::StringPair(func.functionName, emitSelectRecord(func)));
 
+  }
+
+  for (auto &func: functionMappingList){
+    string functionName;
+    raw_string_ostream SS(functionName);
+    SS << "return " << func.second <<  "(name, MIRBuilder, OrigRet, retTy, args, TR);";
+    validOCLFunctions.push_back(StringMatcher::StringPair(func.first, functionName));
   }
 
   OS << "bool generateOpenCLBuiltinMappings(StringRef name, ";
@@ -135,11 +149,10 @@ string SPIRVOpenCLBuiltinsEmitter::emitSelectRecord(OCLFunction function){
   for(auto instrs: function.instrList){
 
     SS << "  auto M" << count << " = MIRBuilder.buildInstr(" << instrs.first << ");\n";
-//    SS << "M"<< count << ".addUse(TR->getSPIRVTypeID(retTy));\n  ";
     bool isVoid = true;
     for(auto operand : instrs.second){
       StringRef operandType = operand->getType()->getAsString();
-      SS << "// Operand "<< operandType <<"\n";
+      SS << "  // Operand "<< operandType <<"\n";
 
       if (operandType == "OCLDest"){
         isVoid = false;
@@ -163,7 +176,7 @@ string SPIRVOpenCLBuiltinsEmitter::emitSelectRecord(OCLFunction function){
         SS << "  M" << count << ".addUse(*operands[" << operand->getValueAsInt("Index") << "]);\n";
       }
     }
-    if(!isVoid) SS << "  operands["<< count <<"] = M" << count << ".getInstr()->getOperand(0);\n";
+    if(!isVoid) SS << "  operands["<< count <<"] = M" << count << ".getInstr()->getOperand(0).getReg();\n";
     count ++;
   }
   SS << "  return TR->constrainRegOperands(M" << count - 1 << ");\n";
@@ -176,6 +189,7 @@ void SPIRVOpenCLBuiltinsEmitter::emitImports(raw_ostream &OS) {
   OS << "#include \"llvm/ADT/StringRef.h\"" << "\n";
   OS << "#include \"SPIRVTypeRegistry.h\"" << "\n";
   OS << "#include \"llvm/ADT/SmallVector.h\"" << "\n";
+  OS << "#include \"SPIRVOpenCLBIFs.h\"" << "\n";
   OS << "#include \"SPIRV.h\"" << "\n";
   OS << "#include \"SPIRVEnums.h\"" << "\n";
   OS << "#include \"SPIRVRegisterInfo.h\"" << "\n";
@@ -190,7 +204,6 @@ void SPIRVOpenCLBuiltinsEmitter::run(raw_ostream &OS) {
   emitImports(OS);
   getOCLFunctions();
   emitStringMatcher(OS);
-//  emitSelectRecords(OS);
 }
 
 namespace llvm {
