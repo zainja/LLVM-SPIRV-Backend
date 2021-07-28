@@ -75,7 +75,8 @@ def p1 : OCLPair<OpExtInst, [return, defaultReturnType, acos, Arg0]>;
 def p2 : OCLPair<OpFOrdGreaterThanEqual, [return, boolRet, Arg0, Arg1]>;
 
 def : OCLBuiltinMapping<"acos", [p1]>;
-def: OCLBuiltinMapping<"fordgreaterthan", [p2]>;
+def: OCLBuiltinMapping<"__spirv_FOrdGreaterThanEqual(float, float)", [p2]>;
+
 
 // ---------
 def im1 : OCLDest<1>;

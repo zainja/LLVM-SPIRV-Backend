@@ -17,6 +17,7 @@
 #include "SPIRVExtInsts.h"
 #include "SPIRVRegisterInfo.h"
 #include "SPIRVStrings.h"
+#include "SPIRVGenOpenCLBuiltins.inc"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
@@ -1086,6 +1087,12 @@ bool llvm::generateOpenCLBuiltinCall(const StringRef demangledName,
   SPIRVType *retTy = nullptr;
   if (OrigRetTy && !OrigRetTy->isVoidTy())
     retTy = TR->assignTypeToVReg(OrigRetTy, OrigRet, MIRBuilder);
+
+  llvm::outs() << demangledName;
+
+  if(generateOpenCLBuiltinMappings(demangledName, MIRBuilder, OrigRet, retTy, args,TR)) {
+	  return true;
+  }
 
   auto firstBraceIdx = demangledName.find_first_of('(');
   auto nameNoArgs = demangledName.substr(0, firstBraceIdx);
