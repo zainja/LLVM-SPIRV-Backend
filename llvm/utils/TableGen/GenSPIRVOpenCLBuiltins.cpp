@@ -33,19 +33,60 @@ using namespace std;
 
 namespace {
 
+class TypeCount {
+public:
+
+  static TypeCount* getInstance(){
+    if (inst_ == NULL) {
+       inst_ = new TypeCount();
+    }
+    return inst_;
+
+  }
+  int getValue() {
+    int val = value;
+    value ++;
+    return val;
+  };
+  int getValNoIncrease(){
+    return value;
+  }
+protected:
+  int value;
+private:
+  static TypeCount* inst_;
+  TypeCount() : value(0) {}
+  TypeCount(const TypeCount&);
+  TypeCount& operator=(const TypeCount&);
+
+};
+
+TypeCount* TypeCount::inst_ = NULL;
+
+
 // Any helper data structures can be defined here. Some backends use
 // structs to collect information from the records.
+typedef struct {
+  StringRef Opcode;
+  vector<Record *> operands;
+} SPIRVInstruction;
 
 typedef struct {
   StringRef functionName;
-  MapVector<unsigned, vector<Record *>> instrList;
+  MapVector<StringRef, SPIRVInstruction> instrList;
 } OCLFunction;
+
 
 class SPIRVOpenCLBuiltinsEmitter {
 private:
   RecordKeeper &Records;
+  TypeCount* typeCount = TypeCount::getInstance();
   vector<OCLFunction> mappingsList;
+  string createBaseType(Record* baseType);
+  string createVectorReturnType(Record* vectorType);
+  string createInstrReturnType(Record* returnTypeOperand, unsigned count);
   vector<pair<StringRef, StringRef>> functionMappingList;
+  vector<pair<StringRef, StringRef>> matchingMappingList;
   void getOCLFunctions();
   void emitStringMatcher(raw_ostream &OS);
   string emitSelectRecord(OCLFunction function);
@@ -65,11 +106,12 @@ void SPIRVOpenCLBuiltinsEmitter::getOCLFunctions() {
   for (auto const &record : OCLRecords) {
     StringRef oclFunctionName = record->getValueAsString("opencl_name");
     auto instrList = record->getValueAsListOfDefs("InstrList");
-    auto operandsMap = MapVector<unsigned, vector<Record *>>();
+    auto operandsMap = MapVector<StringRef, SPIRVInstruction>();
     for(auto const  &rec: instrList){
-      auto SPIRVOpcode = rec->getValueAsInt("Opcode");
+      auto name = rec->getName();
+      auto SPIRVOpcode = rec->getValueAsString("Opcode");
       vector<Record *> operands = rec->getValueAsListOfDefs("Args");
-      operandsMap.insert({SPIRVOpcode, operands});
+      operandsMap.insert({name, {SPIRVOpcode, operands}});
 
     }
     mappingsList.push_back({oclFunctionName, operandsMap});
@@ -81,13 +123,21 @@ void SPIRVOpenCLBuiltinsEmitter::getOCLFunctions() {
     functionMappingList.push_back({oclFunctionName, functionName});
   }
 
+  auto OCLMatchingMappingRecords = Records.getAllDerivedDefinitions("OCLMatchingMapping");
+  for(auto const &record: OCLMatchingMappingRecords){
+    StringRef startsWith = record->getValueAsString("starts_with");
+    StringRef handler = record->getValueAsString("handler");
+    matchingMappingList.push_back({startsWith, handler});
+  }
+
 }
 
 void SPIRVOpenCLBuiltinsEmitter::emitStringMatcher(raw_ostream &OS) {
   vector<StringMatcher::StringPair> validOCLFunctions;
+  string matchingLadder;
+  raw_string_ostream MatchingStream(matchingLadder);
   for (auto &func : mappingsList) {
     validOCLFunctions.push_back(StringMatcher::StringPair(func.functionName, emitSelectRecord(func)));
-
   }
 
   for (auto &func: functionMappingList){
@@ -96,77 +146,121 @@ void SPIRVOpenCLBuiltinsEmitter::emitStringMatcher(raw_ostream &OS) {
     SS << "return " << func.second <<  "(name, MIRBuilder, OrigRet, retTy, args, TR);";
     validOCLFunctions.push_back(StringMatcher::StringPair(func.first, functionName));
   }
+  for (auto &mapping : matchingMappingList){
+    string functionName;
+    raw_string_ostream MM(functionName);
+    MM << "return " << mapping.second <<  "(name, MIRBuilder, OrigRet, retTy, args, TR);\n";
+    MatchingStream << "  if(name.startswith(\"" << mapping.first << "\"))  " << functionName;
 
+  }
   OS << "bool generateOpenCLBuiltinMappings(StringRef name, ";
   OS << " MachineIRBuilder &MIRBuilder, Register OrigRet, const SPIRVType *retTy, const SmallVectorImpl<Register> &args," <<
       "SPIRVTypeRegistry *TR) {\n";
-
-  StringMatcher("name", validOCLFunctions, OS).Emit(0, true);
+  OS << matchingLadder;
+  OS << "  auto firstBraceIdx = name.find_first_of('(');\n";
+  OS << "  auto nameNoArgs = name.substr(0, firstBraceIdx);\n";
+  OS << "  const auto MRI = MIRBuilder.getMRI();\n";
+  StringMatcher("nameNoArgs", validOCLFunctions, OS).Emit(0, true);
 
   OS << "  return false;\n";
   OS << "}\n";
 
 }
 
-string createInstrReturnType(Record* returnTypeOperand, unsigned count){
+string SPIRVOpenCLBuiltinsEmitter::createBaseType(Record* baseType){
+  string returnTypeStr;
+  raw_string_ostream SS(returnTypeStr);
+  auto retTy = baseType->getType()->getAsString();
+  if(retTy == "BoolType"){
+    SS << "  auto type" << typeCount->getValue() << " = TR->getOrCreateSPIRVBoolType(MIRBuilder);\n";
+  }else if(retTy == "IntType"){
+    auto bitWidth = baseType->getValueAsInt("bitwidth");
+    SS << "  auto type" << typeCount->getValue() << " = TR->getOrCreateSPIRVIntegerType(" << bitWidth << ", MIRBuilder);\n";
+  }else if(retTy == "VoidType"){
+    int val = typeCount->getValue();
+    SS << "  auto contextType" << val << " = Type::getVoidTy(MIRBuilder.getMF().getFunction().getContext());\n";
+    SS << "  auto type" << val << " = TR->getOrCreateSPIRVType(contextType" << val << ", MIRBuilder);\n";
+  }
+  return returnTypeStr;
+}
+string SPIRVOpenCLBuiltinsEmitter::createVectorReturnType(Record* vectorType){
+  string returnTypeStr;
+  raw_string_ostream SS(returnTypeStr);
+  auto NumElements = vectorType->getValueAsInt("VecWidth");
+  auto baseTy = vectorType->getValueAsDef("baseTy");
+  SS << "  //baseTy " << baseTy->getType()->getAsString() << "\n";
+  string baseTypeStr = createBaseType(baseTy);
+  SS << baseTypeStr;
+  int vectorVal = typeCount->getValue();
+  SS << "  auto type" << vectorVal << " = TR->getOrCreateSPIRVVectorType(type" << vectorVal - 1 << ", " << NumElements <<
+           ", MIRBuilder);\n";
+
+  return returnTypeStr;
+
+}
+string SPIRVOpenCLBuiltinsEmitter::createInstrReturnType(Record* returnTypeOperand, unsigned count){
 
   string returnTypeStr;
   raw_string_ostream SS(returnTypeStr);
-  if(returnTypeOperand->getValueAsBit("isDefault"))
+  if(returnTypeOperand->getValueAsBit("isDefault")){
     SS << "  M" << count << ".addUse(TR->getSPIRVTypeID(retTy));\n";
-  else {
+  } else {
     auto retTy = returnTypeOperand->getValueAsDef("Ty");
     StringRef retTyClass = retTy->getType()->getAsString();
-    if(retTyClass == "IntType"){
-      auto bitWidth = retTy->getValueAsInt("bitwidth");
-      SS << "  auto type = TR->getOrCreateSPIRVIntegerType(" << bitWidth << ", MIRBuilder);\n";
-    }else if(retTyClass == "BoolType"){
-      SS << "  auto type = TR->getOrCreateSPIRVBoolType(MIRBuilder);\n";
-    }else if(retTyClass == "VectorType"){
-      auto NumElements = retTy->getValueAsInt("VecWidth");
-      auto baseTy = returnTypeOperand->getValueAsDef("baseTy");
-      StringRef baseTyClass = baseTy->getType()->getAsString();
-      if(baseTyClass == "IntType"){
-        auto bitWidth = retTy->getValueAsInt("bitwidth");
-        SS << "  auto BaseType = TR->getOrCreateSPIRVIntegerType(" << bitWidth << ", MIRBuilder);\n";
-      }else if(baseTyClass == "BoolType"){
-        SS << "  auto BaseType = TR->getOrCreateSPIRVBoolType(MIRBuilder);\n";
-      }
-      SS << "  auto type = TR->getOrCreateSPIRVVectorType(BaseType, " << NumElements <<
-          ", MIRBuilder)";
+    if(retTyClass == "VectorType"){
+      SS << createVectorReturnType(retTy);
+    }else {
+      SS << createBaseType(retTy);
     }
-    SS << "  M" << count << ".addUse(TR->getSPIRVTypeID(type));\n";
+    SS << "  M" << count << ".addUse(TR->getSPIRVTypeID(type" << typeCount->getValue() - 1 << "));\n";
   }
   return returnTypeStr;
 
 }
 string SPIRVOpenCLBuiltinsEmitter::emitSelectRecord(OCLFunction function){
+  int operandSize = function.instrList.size();
   string caseBody;
   raw_string_ostream SS(caseBody);
   SS << "{\n";
-  SS << "  Register operands ["<< function.instrList.size() <<"];\n";
+  if(operandSize > 1)
+    SS << "  Register operands ["<< function.instrList.size() <<"];\n";
   int count = 0;
   for(auto instrs: function.instrList){
-
-    SS << "  auto M" << count << " = MIRBuilder.buildInstr(" << instrs.first << ");\n";
+    SS << "  // Instruction: " << instrs.first << "\n";
+    StringRef opcode = instrs.second.Opcode;
+    vector<Record *> operands = instrs.second.operands;
+    SS << "  auto M" << count << " = MIRBuilder.buildInstr(" << opcode << ");\n";
     bool isVoid = true;
-    for(auto operand : instrs.second){
+    for(auto operand : operands){
       StringRef operandType = operand->getType()->getAsString();
       SS << "  // Operand "<< operandType <<"\n";
 
       if (operandType == "OCLDest"){
         isVoid = false;
         if(operand->getValueAsBit("generic")){
-          SS << "  const auto MRI = MIRBuilder.getMRI();\n";
-          SS << "  auto dest = MRI->createVirtualRegister(&SPIRV::IDRegClass);\n";
-          SS << "  TR->assignSPIRVTypeToVReg(TR->getOrCreateSPIRVIntegerType(32, MIRBuilder), dest, MIRBuilder);\n";
-          SS << "  MRI->setType(dest, LLT::scalar(32));\n";
-          SS << "  M" << count << ".addDef(dest);\n";
+          auto genericType = operand->getValueAsDef("type");
+          auto genericClass = genericType->getType()->getAsString();
+          auto bitwidth = genericType->getValueAsInt("size");
+          if(genericClass == "LLTTypeVector"){
+            auto numElements = genericType->getValueAsInt("num_elements");
+            SS << "  auto dest" << count << " = MRI->createVirtualRegister(LLT::vector(" << numElements << ", " << bitwidth << "));\n";
+            SS << "  auto intDest" << count << " = TR->getOrCreateSPIRVIntegerType(" << bitwidth << ", MIRBuilder);\n";
+            SS << "  auto vecDest" << count << " TR->getOrCreateSPIRVVectorType(intDest" << count << ", " << numElements << ", MIRBuilder);\n";
+            SS << "TR->assignSPIRVTypeToVReg(vecDest" << count << ", dest" << count <<", MIRBuilder);\n";
+          }else {
+            SS << "  auto dest" << count << " = MRI->createVirtualRegister(&SPIRV::IDRegClass);\n";
+            SS << "  TR->assignSPIRVTypeToVReg(TR->getOrCreateSPIRVIntegerType(32, MIRBuilder), dest" << count << ", MIRBuilder);\n";
+            SS << "  MRI->setType(dest" << count << " , LLT::scalar(32));\n";
+            SS << "  M" << count << ".addDef(dest" << count << ");\n";
+          }
         }else
           SS << "  M" << count << ".addDef(OrigRet);\n";
       }
       else if (operandType == "ReturnType"){
         SS << createInstrReturnType(operand, count);
+      }
+      else if (operandType == "EnumType" || operandType == "OpenCLExt"){
+        SS << "  M" << count << ".addImm(" << operand->getValueAsString("val")<< ");\n";
       }
       else if (operandType == "OCLOperand")
         SS << "  M" << count<<".addUse(args[" << operand->getValueAsInt("Index") << "]);\n";
@@ -176,7 +270,7 @@ string SPIRVOpenCLBuiltinsEmitter::emitSelectRecord(OCLFunction function){
         SS << "  M" << count << ".addUse(operands[" << operand->getValueAsInt("Index") << "]);\n";
       }
     }
-    if(!isVoid) SS << "  operands["<< count <<"] = M" << count << ".getInstr()->getOperand(0).getReg();\n";
+    if(!isVoid && operandSize > 1) SS << "  operands["<< count <<"] = M" << count << ".getInstr()->getOperand(0).getReg();\n";
     count ++;
   }
   SS << "  return TR->constrainRegOperands(M" << count - 1 << ");\n";
@@ -192,6 +286,7 @@ void SPIRVOpenCLBuiltinsEmitter::emitImports(raw_ostream &OS) {
   OS << "#include \"SPIRVOpenCLBIFs.h\"" << "\n";
   OS << "#include \"SPIRV.h\"" << "\n";
   OS << "#include \"SPIRVEnums.h\"" << "\n";
+  OS << "#include \"SPIRVExtInsts.h\"" << "\n";
   OS << "#include \"SPIRVRegisterInfo.h\"" << "\n";
   OS << "#include \"llvm/CodeGen/GlobalISel/MachineIRBuilder.h\"" << "\n";
   OS << "using namespace llvm;\n\n";
