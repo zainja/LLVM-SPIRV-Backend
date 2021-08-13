@@ -32,7 +32,7 @@
 #include "SPIRVTypeRegistry.h"
 
 #include "llvm/CodeGen/MachineModuleInfo.h"
-
+#include "llvm/Support/Casting.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "spirv-global-types-vreg"
@@ -185,30 +185,42 @@ static void initMetaBlockBuilder(Module &M, MachineModuleInfo &MMI,
 
 using LocalAliasTablesTy = std::map<MachineFunction *, LocalToGlobalRegTable>;
 
-template <typename T>
+template<typename T>
 static void hoistGlobalOps(MachineIRBuilder &MetaBuilder,
-                           const SPIRVDuplicatesTracker<T> *DT,
-                           MetaBlockType MBType,
-                           LocalAliasTablesTy &LocalAliasTables) {
+    const SPIRVDuplicatesTracker<T> *DT, MetaBlockType MBType,
+    LocalAliasTablesTy &LocalAliasTables) {
   setMetaBlock(MetaBuilder, MBType);
-  SmallVector<MachineInstr *, 8> ToRemove;
+  SmallVector<MachineInstr*, 8> ToRemove;
 
   for (auto &CU : DT->getAllUses()) {
-    auto MetaReg =
-        MetaBuilder.getMRI()->createVirtualRegister(&SPIRV::IDRegClass);
+
+    if (std::is_same<T, Type>::value) {
+      const Type *t = (const Type*) CU.first;
+      if (t->isIntegerTy() || t->isFloatTy())
+        continue;
+    }
+    if (std::is_same<T, Constant>::value) {
+      const Constant *c = (const Constant*) CU.first;
+      if (dyn_cast<ConstantInt>(c))
+        continue;
+    }
+
+    auto MetaReg = MetaBuilder.getMRI()->createVirtualRegister(
+        &SPIRV::IDRegClass);
 
     for (auto &U : CU.second) {
+
       auto *MF = U.first;
       auto Reg = U.second;
       auto *ToHoist = MF->getRegInfo().getVRegDef(Reg);
       ToRemove.push_back(ToHoist);
-
       if (!MetaBuilder.getMRI()->getVRegDef(MetaReg)) {
+
         auto MIB = MetaBuilder.buildInstr(ToHoist->getOpcode());
         MIB.addDef(MetaReg);
 
         for (unsigned int i = ToHoist->getNumExplicitDefs();
-             i < ToHoist->getNumOperands(); ++i) {
+            i < ToHoist->getNumOperands(); ++i) {
           MachineOperand Op = ToHoist->getOperand(i);
           if (Op.isImm()) {
             MIB.addImm(Op.getImm());
@@ -303,6 +315,111 @@ void hoistGlobalOps(MachineIRBuilder &MetaBuilder,
     MI->eraseFromParent();
 }
 
+static void hoistBasicTypes(MachineIRBuilder &MetaBuilder,
+    const SPIRVDuplicatesTracker<Type> *DT,
+    LocalAliasTablesTy &LocalAliasTables) {
+
+  setMetaBlock(MetaBuilder, MB_TypeConstVars);
+  SmallVector<MachineInstr*, 8> ToRemove;
+
+  for (auto &CU : DT->getAllUses()) {
+    auto type = CU.first;
+    if (type->isIntegerTy() || type->isFloatTy()) {
+      auto MetaReg = MetaBuilder.getMRI()->createVirtualRegister(
+          &SPIRV::IDRegClass);
+
+      for (auto &U : CU.second) {
+        auto *MF = U.first;
+        auto Reg = U.second;
+        auto *ToHoist = MF->getRegInfo().getVRegDef(Reg);
+        ToRemove.push_back(ToHoist);
+
+        if (!MetaBuilder.getMRI()->getVRegDef(MetaReg)) {
+
+          auto MIB = MetaBuilder.buildInstr(ToHoist->getOpcode());
+          MIB.addDef(MetaReg);
+
+          for (unsigned int i = ToHoist->getNumExplicitDefs();
+              i < ToHoist->getNumOperands(); ++i) {
+            MachineOperand Op = ToHoist->getOperand(i);
+            if (Op.isImm()) {
+              MIB.addImm(Op.getImm());
+            } else if (Op.isFPImm()) {
+              MIB.addFPImm(Op.getFPImm());
+            } else if (Op.isReg()) {
+              Register metaReg = LocalAliasTables[MF].at(Op.getReg());
+              assert(metaReg.isValid() && "No reg alias found");
+              MIB.addUse(metaReg);
+            } else {
+              errs() << *ToHoist << "\n";
+              llvm_unreachable(
+                  "Unexpected operand type when copying spirv meta instr");
+            }
+          }
+        }
+        LocalAliasTables[MF][Reg] = MetaReg;
+      }
+    }
+
+  }
+
+  for (auto *MI : ToRemove)
+    MI->eraseFromParent();
+}
+
+static void hoistBasicConstants(MachineIRBuilder &MetaBuilder,
+    const SPIRVDuplicatesTracker<Constant> *DT,
+    LocalAliasTablesTy &LocalAliasTables) {
+
+  setMetaBlock(MetaBuilder, MB_TypeConstVars);
+  SmallVector<MachineInstr*, 8> ToRemove;
+
+  for (auto &CU : DT->getAllUses()) {
+
+    auto constType = CU.first;
+    auto MetaReg = MetaBuilder.getMRI()->createVirtualRegister(
+        &SPIRV::IDRegClass);
+
+    if (dyn_cast<ConstantInt>(constType)) {
+      for (auto &U : CU.second) {
+        auto *MF = U.first;
+        auto Reg = U.second;
+        auto *ToHoist = MF->getRegInfo().getVRegDef(Reg);
+        ToRemove.push_back(ToHoist);
+
+        if (!MetaBuilder.getMRI()->getVRegDef(MetaReg)) {
+          auto MIB = MetaBuilder.buildInstr(ToHoist->getOpcode());
+          MIB.addDef(MetaReg);
+
+          for (unsigned int i = ToHoist->getNumExplicitDefs();
+              i < ToHoist->getNumOperands(); ++i) {
+            MachineOperand Op = ToHoist->getOperand(i);
+            if (Op.isImm()) {
+              MIB.addImm(Op.getImm());
+            } else if (Op.isFPImm()) {
+              MIB.addFPImm(Op.getFPImm());
+            } else if (Op.isReg()) {
+              Register metaReg = LocalAliasTables[MF].at(Op.getReg());
+              assert(metaReg.isValid() && "No reg alias found");
+              MIB.addUse(metaReg);
+            } else {
+              errs() << *ToHoist << "\n";
+              llvm_unreachable(
+                  "Unexpected operand type when copying spirv meta instr");
+            }
+          }
+        }
+        LocalAliasTables[MF][Reg] = MetaReg;
+      }
+
+    }
+
+  }
+
+  for (auto *MI : ToRemove)
+    MI->eraseFromParent();
+}
+
 // Move all OpType, OpConstant etc. instructions into the meta block,
 // avoiding creating duplicates, and mapping the global registers to the
 // equivalent function-local ones via functionLocalAliasTables.
@@ -323,6 +440,8 @@ static void hoistInstrsToMetablock(Module &M, MachineModuleInfo &MMI,
   const auto *ST = static_cast<const SPIRVSubtarget *>(&MIRBuilder.getMF().getSubtarget());
   auto *DT = ST->getSPIRVDuplicatesTracker();
 
+  hoistBasicTypes(MIRBuilder, DT->get<Type>(), LocalAliasTables);
+  hoistBasicConstants(MIRBuilder, DT->get<Constant>(), LocalAliasTables);
   hoistGlobalOps<Type>(MIRBuilder, DT->get<Type>(), MB_TypeConstVars, LocalAliasTables);
   hoistGlobalOps<Constant>(MIRBuilder, DT->get<Constant>(), MB_TypeConstVars, LocalAliasTables);
 
@@ -348,6 +467,8 @@ static void hoistInstrsToMetablock(Module &M, MachineModuleInfo &MMI,
   for (MachineInstr *MI : toRemove) {
     MI->removeFromParent();
   }
+
+
   END_FOR_MF_IN_MODULE()
   hoistGlobalOps<GlobalValue>(MIRBuilder, DT->get<GlobalValue>(), MB_TypeConstVars, LocalAliasTables);
   hoistGlobalOps<Function>(MIRBuilder, DT->get<Function>(), MB_ExtFuncDecls, LocalAliasTables);
@@ -573,14 +694,15 @@ static void numberRegistersGlobally(Module &M, MachineModuleInfo &MMI,
             auto VR = localToMetaVRegAliasMap.find(op.getReg());
             if (VR == localToMetaVRegAliasMap.end()) {
               // Stops setReg crashing if reg index > max regs in func
-              addDummyVRegsUpToIndex(RegBaseIndex, MRI);
 
               newReg = Register::index2VirtReg(RegBaseIndex);
-              ++RegBaseIndex;
               localToMetaVRegAliasMap.insert({op.getReg(), newReg});
             } else {
               newReg = VR->second;
+
             }
+            addDummyVRegsUpToIndex(RegBaseIndex, MRI);
+            RegBaseIndex++;
             op.setReg(newReg);
           }
         }

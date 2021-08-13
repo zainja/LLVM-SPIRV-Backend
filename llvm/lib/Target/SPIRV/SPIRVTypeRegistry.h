@@ -137,6 +137,7 @@ private:
   SPIRVType *getOpTypeVector(uint32_t numElems, SPIRVType *elemType,
                              MachineIRBuilder &MIRBuilder);
 
+  Register buildConstantI32(uint32_t val, MachineIRBuilder &MIRBuilder);
   SPIRVType *getOpTypeArray(uint32_t numElems, SPIRVType *elemType,
                             MachineIRBuilder &MIRBuilder);
 

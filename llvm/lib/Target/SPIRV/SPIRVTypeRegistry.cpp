@@ -170,13 +170,14 @@ SPIRVType *SPIRVTypeRegistry::getOpTypeVector(uint32_t numElems,
   return MIB;
 }
 
-static Register buildConstantI32(uint32_t val, MachineIRBuilder &MIRBuilder,
-                                 SPIRVTypeRegistry *TR) {
+Register SPIRVTypeRegistry::buildConstantI32(uint32_t val, MachineIRBuilder &MIRBuilder) {
+
   auto &MF = MIRBuilder.getMF();
   Register res = MF.getRegInfo().createGenericVirtualRegister(LLT::scalar(32));
   auto IntTy = IntegerType::getInt32Ty(MF.getFunction().getContext());
   const auto ConstInt = ConstantInt::get(IntTy, val);
-  TR->assignTypeToVReg(IntTy, res, MIRBuilder);
+  assignTypeToVReg(IntTy, res, MIRBuilder);
+  DT.add(ConstInt, &MIRBuilder.getMF(), res);
   MIRBuilder.buildConstant(res, *ConstInt);
   return res;
 }
@@ -188,7 +189,7 @@ SPIRVType *SPIRVTypeRegistry::getOpTypeArray(uint32_t numElems,
     errs() << *elemType;
     report_fatal_error("Invalid array element type");
   }
-  Register numElementsVReg = buildConstantI32(numElems, MIRBuilder, this);
+  Register numElementsVReg = buildConstantI32(numElems, MIRBuilder);
   auto MIB = MIRBuilder.buildInstr(SPIRV::OpTypeArray)
                  .addDef(createTypeVReg(MIRBuilder))
                  .addUse(getSPIRVTypeID(elemType))
@@ -210,15 +211,19 @@ SPIRVType *SPIRVTypeRegistry::getOpTypeOpaque(const StructType *Ty,
 SPIRVType *
 SPIRVTypeRegistry::getOpTypeStruct(const StructType *Ty,
                                    MachineIRBuilder &MIRBuilder) {
-  Register ResVReg = createTypeVReg(MIRBuilder);
-  auto MIB = MIRBuilder.buildInstr(SPIRV::OpTypeStruct).addDef(ResVReg);
+  SmallVector<Register, 4> operands;
   for (const auto &Elem : Ty->elements()) {
     auto ElemTy = getOrCreateSPIRVType(Elem, MIRBuilder);
     if (ElemTy->getOpcode() == SPIRV::OpTypeVoid) {
       errs() << ElemTy;
       report_fatal_error("Invalid struct element type");
     }
-    MIB.addUse(getSPIRVTypeID(ElemTy));
+    operands.push_back(getSPIRVTypeID(ElemTy));
+  }
+  Register ResVReg = createTypeVReg(MIRBuilder);
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpTypeStruct).addDef(ResVReg);
+  for(auto op: operands){
+    MIB.addUse(op);
   }
   if (Ty->hasName())
     buildOpName(ResVReg, Ty->getName(), MIRBuilder);
