@@ -14,7 +14,7 @@
 
 #include "MCTargetDesc/SPIRVMCAsmInfo.h"
 #include "MCTargetDesc/SPIRVMCTargetDesc.h"
-
+#include "SPIRVTargetStreamer.h"
 #include "SPIRVInstPrinter.h"
 
 #include "llvm/MC/MCInstrAnalysis.h"
@@ -58,6 +58,12 @@ createSPIRVMCStreamer(const Triple &T, MCContext &Ctx,
                       std::unique_ptr<MCCodeEmitter> &&Emitter, bool RelaxAll) {
   return createSPIRVStreamer(Ctx, std::move(MAB), std::move(OW),
                              std::move(Emitter), RelaxAll);
+}
+
+static MCTargetStreamer *createTargetAsmStreamer(MCStreamer &S,
+                                                 formatted_raw_ostream &,
+                                                 MCInstPrinter *, bool) {
+  return new SPIRVTargetStreamer(S);
 }
 
 static MCInstPrinter *createSPIRVMCInstPrinter(const Triple &T,
@@ -113,5 +119,9 @@ extern "C" void LLVMInitializeSPIRVTargetMC() {
 
     // Register the ASM Backend
     TargetRegistry::RegisterMCAsmBackend(*T, createSPIRVAsmBackend);
+		
+		// Register the AsmTargetStreamer
+    TargetRegistry::RegisterAsmTargetStreamer(*T, createTargetAsmStreamer);
+
   }
 }
