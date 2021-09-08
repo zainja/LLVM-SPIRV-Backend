@@ -35,6 +35,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/IntrinsicsSPIRV.h"
 
 #define DEBUG_TYPE "spirv-isel"
 
@@ -107,7 +108,9 @@ private:
   bool selectAddrSpaceCast(Register resVReg, const SPIRVType *resType,
                            const MachineInstr &I,
                            MachineIRBuilder &MIRBuilder) const;
-
+  bool selectIntrinsic(Register resVReg, const SPIRVType *resType,
+                           const MachineInstr &I,
+                           MachineIRBuilder &MIRBuilder) const;
 #if 0
   bool selectOverflowOp(Register resVReg, const SPIRVType *resType,
                         const MachineInstr &I, MachineIRBuilder &MIRBuilder,
@@ -444,12 +447,103 @@ bool SPIRVInstructionSelector::spvSelect(Register resVReg,
 
   case TargetOpcode::G_FENCE:
     return selectFence(I, MIRBuilder);
-
+  case TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS:
+    return selectIntrinsic(resVReg, resType, I, MIRBuilder);
   default:
     return false;
   }
 }
+static bool decorate(Register target, Decoration::Decoration decoration,
+                     MachineIRBuilder &MIRBuilder, SPIRVTypeRegistry *TR) {
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpDecorate)
+                 .addUse(target)
+                 .addImm(decoration);
+  return TR->constrainRegOperands(MIB);
+}
 
+static bool decorate(Register target, Decoration::Decoration decoration,
+                     uint32_t decArg, MachineIRBuilder &MIRBuilder,
+                     SPIRVTypeRegistry *TR) {
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpDecorate)
+                 .addUse(target)
+                 .addImm(decoration)
+                 .addImm(decArg);
+  return TR->constrainRegOperands(MIB);
+}
+
+static bool decorateLinkage(Register target, const StringRef name,
+                            LinkageType::LinkageType linkageType,
+                            MachineIRBuilder &MIRBuilder,
+                            SPIRVTypeRegistry *TR) {
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpDecorate)
+                 .addUse(target)
+                 .addImm(Decoration::LinkageAttributes);
+  addStringImm(name, MIB);
+  MIB.addImm(LinkageType::Import);
+  bool success = TR->constrainRegOperands(MIB);
+
+  auto nameMIB = MIRBuilder.buildInstr(SPIRV::OpName).addUse(target);
+  addStringImm(name, nameMIB);
+  return success;
+}
+
+static bool decorateConstant(Register target, MachineIRBuilder &MIRBuilder,
+                             SPIRVTypeRegistry *TR) {
+  return decorate(target, Decoration::Constant, MIRBuilder, TR);
+}
+
+static bool decorateBuiltIn(Register target, BuiltIn::BuiltIn builtInID,
+                            MachineIRBuilder &MIRBuilder,
+                            SPIRVTypeRegistry *TR) {
+  bool succ = decorate(target, Decoration::BuiltIn, builtInID, MIRBuilder, TR);
+  succ = succ && decorateLinkage(target, getLinkStrForBuiltIn(builtInID),
+                                 LinkageType::Import, MIRBuilder, TR);
+  return succ;
+}
+
+static Register buildOpVariable(SPIRVType *BaseType,
+                                StorageClass::StorageClass Storage,
+                                MachineIRBuilder &MIRBuilder,
+                                SPIRVTypeRegistry *TR) {
+  auto Reg = MIRBuilder.getMRI()->createVirtualRegister(&SPIRV::IDRegClass);
+  // TODO: consider using correct address space
+  // p0 is canonical type for selection though
+  MIRBuilder.getMRI()->setType(Reg, LLT::pointer(0, TR->getPointerSize()));
+  SPIRVType *PtrTy =
+      TR->getOrCreateSPIRVPointerType(BaseType, MIRBuilder, Storage);
+  TR->assignSPIRVTypeToVReg(PtrTy, Reg, MIRBuilder);
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpVariable)
+                 .addDef(Reg)
+                 .addUse(TR->getSPIRVTypeID(PtrTy))
+                 .addImm(Storage);
+  TR->constrainRegOperands(MIB);
+  return Reg;
+}
+
+static bool selectGId(Register resVReg, const SPIRVType *resType, const MachineInstr &I, MachineIRBuilder &MIRBuilder, SPIRVTypeRegistry *TR){
+  // build load
+  // Source
+  Register globVar = buildOpVariable(resType, StorageClass::Input, MIRBuilder, TR);
+  decorateBuiltIn(globVar, BuiltIn::GlobalInvocationId, MIRBuilder, TR);
+  MIRBuilder.buildInstr(SPIRV::OpLoad)
+      .addDef(resVReg)
+      .addUse(TR->getSPIRVTypeID(resType))
+      .addUse(globVar);
+  return true;
+}
+bool SPIRVInstructionSelector::selectIntrinsic(Register resVReg,
+    const SPIRVType *resType,
+    const MachineInstr &I,
+    MachineIRBuilder &MIRBuilder) const {
+  switch(I.getOperand(1).getIntrinsicID()){
+    case Intrinsic::spirv_builtin_ext:
+      return selectGId(resVReg, resType, I, MIRBuilder, &TR);
+    default:
+      return false;
+  }
+
+
+}
 bool SPIRVInstructionSelector::selectExtInst(Register resVReg,
                                              const SPIRVType *resType,
                                              const MachineInstr &I,
