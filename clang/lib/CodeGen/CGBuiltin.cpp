@@ -4259,13 +4259,11 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
 
   case Builtin::BIget_global_id:
   {
-
     llvm::Value* idx = EmitScalarExpr(E->getArg(0));
     llvm::VectorType* VecType = llvm::VectorType::get(Builder.getInt32Ty(), 3, false);
-    llvm::Type *VectorTyPtr = VecType->getPointerTo();
-
-    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_builtin_ext, {VectorTyPtr, Builder.getInt32Ty()});
-    auto vectorValue = Builder.CreateCall(val, idx);
+    // llvm::Type *VectorTyPtr = VecType->getPointerTo();
+    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_builtin_ext, VecType);
+    auto vectorValue = Builder.CreateCall(val, llvm::ConstantInt::get(Builder.getInt32Ty(), {32, 0}));
     return RValue::get(Builder.CreateExtractElement(vectorValue, idx));
 
   }
