@@ -770,7 +770,7 @@ static void InsertOCLBuiltinDeclarationsFromTable(Sema &S, LookupResult &LR,
                                                   const unsigned Len) {
   // The builtin function declaration uses generic types (gentype).
   bool HasGenType = false;
-
+  
   // Maximum number of types contained in a generic type used as return type or
   // as argument.  Only meaningful for generic types, otherwise equals 1.
   unsigned GenTypeMaxCnt;

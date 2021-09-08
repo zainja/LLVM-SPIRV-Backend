@@ -11,3 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 //TODO define some intrinsics
+
+let TargetPrefix = "spirv" in {
+    def int_spirv_builtin_ext : Intrinsic<[llvm_any_ty], [llvm_i32_ty], []>;
+}

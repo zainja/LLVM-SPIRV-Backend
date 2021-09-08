@@ -35,6 +35,7 @@
 #include "llvm/IR/IntrinsicsAArch64.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsARM.h"
+#include "llvm/IR/IntrinsicsSPIRV.h"
 #include "llvm/IR/IntrinsicsBPF.h"
 #include "llvm/IR/IntrinsicsHexagon.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
@@ -4247,6 +4248,31 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Value *HalfVal = Builder.CreateLoad(Address);
     return RValue::get(Builder.CreateFPExt(HalfVal, Builder.getFloatTy()));
   }
+
+  case Builtin::BI__CLBuiltin_cosf:
+  case Builtin::BI__CLBuiltin_cosd: {
+    return RValue::get(emitUnaryMaybeConstrainedFPBuiltin(*this, E,
+                                   Intrinsic::cos,
+                                   Intrinsic::experimental_constrained_cos));
+  }
+
+
+  case Builtin::BIget_global_id:
+  {
+
+    llvm::Value* idx = EmitScalarExpr(E->getArg(0));
+    llvm::VectorType* VecType = llvm::VectorType::get(Builder.getInt32Ty(), 3, false);
+    llvm::Type *VectorTyPtr = VecType->getPointerTo();
+
+    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_builtin_ext, {VectorTyPtr, Builder.getInt32Ty()});
+    auto vectorValue = Builder.CreateCall(val, idx);
+    return RValue::get(Builder.CreateExtractElement(vectorValue, idx));
+
+  }
+
+    
+
+
   case Builtin::BIprintf:
     if (getTarget().getTriple().isNVPTX())
       return EmitNVPTXDevicePrintfCallExpr(E, ReturnValue);
