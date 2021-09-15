@@ -922,8 +922,8 @@ bool Sema::LookupBuiltin(LookupResult &R) {
       if (getLangOpts().OpenCL && getLangOpts().DeclareOpenCLBuiltins) {
         auto Index = isOpenCLBuiltin(II->getName());
         if (Index.first) {
-          InsertOCLBuiltinDeclarationsFromTable(*this, R, II, Index.first - 1,
-                                                Index.second);
+          // InsertOCLBuiltinDeclarationsFromTable(*this, R, II, Index.first - 1,
+          //                                       Index.second);
           return true;
         }
       }

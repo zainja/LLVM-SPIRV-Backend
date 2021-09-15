@@ -5023,9 +5023,13 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     return RValue::get(Builder.CreateExtractElement(vectorValue, idx));
 
   }
-
-    
-
+  case Builtin::BIread_imagef:{
+    auto coords = EmitAggExprToLValue(E->getArg(2)).getVectorPointer();
+    llvm::VectorType* VecType = llvm::VectorType::get(Builder.getFloatTy(), 4, false);
+    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_builtin_ext, {VecType, coords->getType()});
+    auto vectorValue = Builder.CreateCall(val, {llvm::ConstantInt::get(Builder.getInt32Ty(), {32, 0}), coords});
+    return RValue::get(vectorValue);
+  }
 
   case Builtin::BIprintf:
     if (getTarget().getTriple().isNVPTX())

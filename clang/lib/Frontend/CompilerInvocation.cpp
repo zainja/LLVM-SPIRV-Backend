@@ -3179,12 +3179,13 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
 
     // Include default header file for OpenCL.
     if (Opts.IncludeDefaultHeader) {
-      if (Opts.DeclareOpenCLBuiltins) {
-        // Only include base header file for builtin types and constants.
-        Includes.push_back("opencl-c-base.h");
-      } else {
-        Includes.push_back("opencl-c.h");
-      }
+      // if (Opts.DeclareOpenCLBuiltins) {
+      //   // Only include base header file for builtin types and constants.
+      //   PPOpts.Includes.push_back("opencl-c-base.h");
+      // } else {
+      //   PPOpts.Includes.push_back("opencl-c.h");
+      // }
+      PPOpts.Includes.push_back("opencl-c-base.h");
     }
   }
 
