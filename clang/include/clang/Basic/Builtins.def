@@ -1573,12 +1573,11 @@ LANGBUILTIN(__builtin_load_half, "dhC*", "nc", ALL_OCLC_LANGUAGES)
 LANGBUILTIN(__builtin_load_halff, "fhC*", "nc", ALL_OCLC_LANGUAGES)
 
 // OpenCL builtin math functions
-LANGBUILTIN(__CLBuiltin_cosf, "ff", "n", ALL_OCLC_LANGUAGES)
-LANGBUILTIN(__CLBuiltin_cosd, "dd", "n", ALL_OCLC_LANGUAGES)
+// LANGBUILTIN(__CLBuiltin_cosf, "ff", "n", ALL_OCLC_LANGUAGES)
+// LANGBUILTIN(__CLBuiltin_cosd, "dd", "n", ALL_OCLC_LANGUAGES)
 
 
 //OpenCL Builtin work-item Built-in Functions
-LANGBUILTIN(get_global_id, "zUi", "n", ALL_OCLC_LANGUAGES)
 
 // Builtins for os_log/os_trace
 BUILTIN(__builtin_os_log_format_buffer_size, "zcC*.", "p:0:nut")

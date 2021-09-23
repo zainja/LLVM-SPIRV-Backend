@@ -65,6 +65,14 @@ namespace clang {
   };
   }
 
+  namespace SPIRV {
+    enum {
+      LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
+      #define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+      #include "clang/Basic/BuiltinsSPIRV.def"
+      LastTSBuiltin
+    };
+  }
   /// BPF builtins
   namespace BPF {
   enum {
@@ -321,7 +329,7 @@ namespace clang {
   }
 
   static constexpr uint64_t LargestBuiltinID = std::max<uint64_t>(
-      {NEON::FirstTSBuiltin, ARM::LastTSBuiltin, SVE::FirstTSBuiltin,
+      {NEON::FirstTSBuiltin, ARM::LastTSBuiltin, SVE::FirstTSBuiltin, SPIRV::LastTSBuiltin,
        AArch64::LastTSBuiltin, BPF::LastTSBuiltin, PPC::LastTSBuiltin,
        NVPTX::LastTSBuiltin, AMDGPU::LastTSBuiltin, X86::LastTSBuiltin,
        Hexagon::LastTSBuiltin, Mips::LastTSBuiltin, XCore::LastTSBuiltin,
