@@ -49,8 +49,11 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/X86TargetParser.h"
+#include "SPIRVEnums.h"
+#include "SPIRVExtInsts.h"
 #include <sstream>
-
+#include <set>
+#include "OpenCLBuiltins.inc"
 using namespace clang;
 using namespace CodeGen;
 using namespace llvm;
@@ -82,6 +85,110 @@ static void initializeAlloca(CodeGenFunction &CGF, AllocaInst *AI, Value *Size,
   CGF.Builder.CreateMemSet(AI, Byte, Size, AlignmentInBytes);
 }
 
+/// Get the QualType instances of the return type and arguments for an OpenCL
+/// builtin function signature.
+/// \param Context (in) The Context instance.
+/// \param OpenCLBuiltin (in) The signature currently handled.
+/// \param GenTypeMaxCnt (out) Maximum number of types contained in a generic
+///        type used as return type or as argument.
+///        Only meaningful for generic types, otherwise equals 1.
+/// \param RetTypes (out) List of the possible return types.
+/// \param ArgTypes (out) List of the possible argument types.  For each
+///        argument, ArgTypes contains QualTypes for the Cartesian product
+///        of (vector sizes) x (types) .
+static void GetQualTypesForOpenCLBuiltin(
+    ASTContext &Context, const OpenCLBuiltinStruct &OpenCLBuiltin,
+    unsigned &GenTypeMaxCnt, SmallVector<QualType, 1> &RetTypes,
+    SmallVector<SmallVector<QualType, 1>, 5> &ArgTypes) {
+  // Get the QualType instances of the return types.
+  unsigned Sig = SignatureTable[OpenCLBuiltin.SigTableIndex];
+  OCL2Qual(Context, TypeTable[Sig], RetTypes);
+  GenTypeMaxCnt = RetTypes.size();
+
+  // Get the QualType instances of the arguments.
+  // First type is the return type, skip it.
+  for (unsigned Index = 1; Index < OpenCLBuiltin.NumTypes; Index++) {
+    SmallVector<QualType, 1> Ty;
+    OCL2Qual(Context,
+        TypeTable[SignatureTable[OpenCLBuiltin.SigTableIndex + Index]], Ty);
+    GenTypeMaxCnt = (Ty.size() > GenTypeMaxCnt) ? Ty.size() : GenTypeMaxCnt;
+    ArgTypes.push_back(std::move(Ty));
+  }
+}
+/// Create a list of the candidate function overloads for an OpenCL builtin
+/// function.
+/// \param Context (in) The ASTContext instance.
+/// \param GenTypeMaxCnt (in) Maximum number of types contained in a generic
+///        type used as return type or as argument.
+///        Only meaningful for generic types, otherwise equals 1.
+/// \param FunctionList (out) List of FunctionTypes.
+/// \param RetTypes (in) List of the possible return types.
+/// \param ArgTypes (in) List of the possible types for the arguments.
+static void GetOpenCLBuiltinFctOverloads(
+    ASTContext &Context, unsigned GenTypeMaxCnt,
+    std::vector<QualType> &FunctionList, SmallVector<QualType, 1> &RetTypes,
+    SmallVector<SmallVector<QualType, 1>, 5> &ArgTypes) {
+  FunctionProtoType::ExtProtoInfo PI;
+  PI.Variadic = false;
+
+  // Create FunctionTypes for each (gen)type.
+  for (unsigned IGenType = 0; IGenType < GenTypeMaxCnt; IGenType++) {
+    SmallVector<QualType, 5> ArgList;
+
+    for (unsigned A = 0; A < ArgTypes.size(); A++) {
+      // Builtins such as "max" have an "sgentype" argument that represents
+      // the corresponding scalar type of a gentype.  The number of gentypes
+      // must be a multiple of the number of sgentypes.
+      assert(GenTypeMaxCnt % ArgTypes[A].size() == 0 &&
+             "argument type count not compatible with gentype type count");
+      unsigned Idx = IGenType % ArgTypes[A].size();
+      ArgList.push_back(ArgTypes[A][Idx]);
+    }
+
+    FunctionList.push_back(Context.getFunctionType(
+        RetTypes[(RetTypes.size() != 1) ? IGenType : 0], ArgList, PI));
+  }
+}
+void getAllOCLOverloads(CodeGenFunction* CGF, const IdentifierInfo *II,
+ const unsigned FctIndex,
+  const unsigned Len, std::set<const FunctionProtoType*> &validOCLDecls){
+  bool HasGenType = false;
+  unsigned GenTypeMaxCnt;
+  for (unsigned SignatureIndex = 0; SignatureIndex < Len; SignatureIndex++) {
+    const OpenCLBuiltinStruct &OpenCLBuiltin =
+        BuiltinTable[FctIndex + SignatureIndex];
+    ASTContext &Context = CGF->getContext();
+    // Ignore this BIF if its version does not match the language options.
+    unsigned OpenCLVersion = Context.getLangOpts().OpenCLVersion;
+    if (Context.getLangOpts().OpenCLCPlusPlus)
+      OpenCLVersion = 200;
+    if (OpenCLVersion < OpenCLBuiltin.MinVersion)
+      continue;
+    if ((OpenCLBuiltin.MaxVersion != 0) &&
+        (OpenCLVersion >= OpenCLBuiltin.MaxVersion))
+      continue;
+
+    SmallVector<QualType, 1> RetTypes;
+    SmallVector<SmallVector<QualType, 1>, 5> ArgTypes;
+
+    // Obtain QualType lists for the function signature.
+    GetQualTypesForOpenCLBuiltin(Context, OpenCLBuiltin, GenTypeMaxCnt,
+                                 RetTypes, ArgTypes);
+    
+    // Create function overload for each type combination.
+    std::vector<QualType> FunctionList;
+    GetOpenCLBuiltinFctOverloads(Context, GenTypeMaxCnt, FunctionList, RetTypes,
+                                 ArgTypes);
+    
+    for(unsigned Index = 0; Index < GenTypeMaxCnt; Index++){
+      if (const FunctionProtoType *FP = dyn_cast<FunctionProtoType>(FunctionList[Index])){
+        validOCLDecls.insert(FP);
+      }
+    }
+
+  }
+
+}
 /// getBuiltinLibFunction - Given a builtin id for a function like
 /// "__builtin_fabsf", return a Function* for "fabsf".
 llvm::Constant *CodeGenModule::getBuiltinLibFunction(const FunctionDecl *FD,
@@ -4248,28 +4355,40 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Value *HalfVal = Builder.CreateLoad(Address);
     return RValue::get(Builder.CreateFPExt(HalfVal, Builder.getFloatTy()));
   }
-
-  case Builtin::BI__CLBuiltin_cosf:
-  case Builtin::BI__CLBuiltin_cosd: {
-    return RValue::get(emitUnaryMaybeConstrainedFPBuiltin(*this, E,
-                                   Intrinsic::cos,
-                                   Intrinsic::experimental_constrained_cos));
-  }
-
-
-  case Builtin::BIget_global_id:
+  case SPIRV::BIcos:
   {
     llvm::Value* idx = EmitScalarExpr(E->getArg(0));
-    llvm::VectorType* VecType = llvm::VectorType::get(Builder.getInt32Ty(), 3, false);
-    // llvm::Type *VectorTyPtr = VecType->getPointerTo();
-    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_builtin_ext, VecType);
-    auto vectorValue = Builder.CreateCall(val, llvm::ConstantInt::get(Builder.getInt32Ty(), {32, 0}));
-    return RValue::get(Builder.CreateExtractElement(vectorValue, idx));
-
+    auto val = CGM.getIntrinsic(llvm::Intrinsic::cos, idx->getType());
+    return RValue::get(Builder.CreateCall(val, idx));
   }
-
-    
-
+  case SPIRV::BIget_global_id:
+  {
+    llvm::Value* idx = EmitScalarExpr(E->getArg(0));
+    llvm::Type* vecType = llvm::VectorType::get(Builder.getInt32Ty(), 3, false);
+    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_workgroup, vecType);
+    auto decoration = ConstantInt::get(Builder.getInt32Ty(), {32, BuiltIn::GlobalInvocationId});
+    auto vectorValue = Builder.CreateCall(val, decoration);
+    return RValue::get(Builder.CreateExtractElement(vectorValue, idx));
+  }
+  case SPIRV::BIread_imagef: {
+    const clang::FunctionProtoType* calleeProto = E->getCallee()->getType()->castAs<FunctionProtoType>();
+    const IdentifierInfo* II = E->getDirectCallee()->getLiteralIdentifier();
+    auto Index = isOpenCLBuiltin(II->getName());
+    if(Index.first){
+      std::set<const FunctionProtoType*> validOverloads;
+      getAllOCLOverloads(this, II, Index.first - 1, Index.second, validOverloads);
+      if(validOverloads.find(calleeProto) == validOverloads.end()){
+        break;
+      }
+    }
+    auto img = EmitScalarExpr(E->getArg(0));
+    auto smpl = EmitScalarExpr(E->getArg(1));
+    auto coords = EmitScalarExpr(E->getArg(2));
+    auto returnType = ConvertType(E->getType());
+    auto val = CGM.getIntrinsic(llvm::Intrinsic::spirv_read_sampled_image, {returnType, img->getType(), smpl->getType(), coords->getType()});
+    auto vectorValue = Builder.CreateCall(val, {img, smpl, coords});
+    return RValue::get(vectorValue);
+  }
 
   case Builtin::BIprintf:
     if (getTarget().getTriple().isNVPTX())

@@ -1,0 +1,25 @@
+//==- BuiltinsSPIRV.def - SPIRV Builtin function database ----*- C++ -*-==//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the SPIRV-specific builtin function database.  Users of
+// this file must define the BUILTIN macro to make use of this information.
+//
+//===----------------------------------------------------------------------===//
+
+// The format of this database matches clang/Basic/Builtins.def.
+
+#if defined(BUILTIN) && !defined(LANGBUILTIN)
+#   define LANGBUILTIN(ID, TYPE, ATTRS, BUILTIN_LANG) BUILTIN(ID, TYPE, ATTRS)
+#endif
+
+LANGBUILTIN(get_global_id, "zUi", "n", ALL_OCLC_LANGUAGES)
+LANGBUILTIN(read_imagef, "V4fv*1v*2V2i", "tn", ALL_OCLC_LANGUAGES)
+
+LANGBUILTIN(cos, "ff", "tn", ALL_OCLC_LANGUAGES)
+#undef BUILTIN
+#undef LANGBUILTIN

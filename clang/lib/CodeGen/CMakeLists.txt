@@ -26,6 +26,10 @@ set(LLVM_LINK_COMPONENTS
   TransformUtils
   )
 
+clang_tablegen(OpenCLBuiltins.inc -gen-clang-opencl-builtins
+  SOURCE OpenCLBuiltins.td
+  TARGET CodeGenOpenCLBuiltinsImpl
+  )
 add_clang_library(clangCodeGen
   BackendUtil.cpp
   CGAtomic.cpp
@@ -80,6 +84,9 @@ add_clang_library(clangCodeGen
   ModuleBuilder.cpp
   ObjectFilePCHContainerOperations.cpp
   PatternInit.cpp
+  SPIRVEnums.h
+  SPIRVExtensions.h
+  SPIRVExtInsts.h
   SanitizerMetadata.cpp
   SwiftCallingConv.cpp
   TargetInfo.cpp
@@ -87,6 +94,8 @@ add_clang_library(clangCodeGen
 
   DEPENDS
   intrinsics_gen
+  CodeGenOpenCLBuiltinsImpl
+  omp_gen
 
   LINK_LIBS
   clangAnalysis

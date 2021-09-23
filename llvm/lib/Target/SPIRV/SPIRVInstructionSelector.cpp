@@ -108,6 +108,8 @@ private:
   bool selectAddrSpaceCast(Register resVReg, const SPIRVType *resType,
                            const MachineInstr &I,
                            MachineIRBuilder &MIRBuilder) const;
+  bool selectSampledImage(Register resVReg, const SPIRVType *resType, const MachineInstr &I,
+                           MachineIRBuilder &MIRBuilder, SPIRVTypeRegistry *TR) const;
   bool selectIntrinsic(Register resVReg, const SPIRVType *resType,
                            const MachineInstr &I,
                            MachineIRBuilder &MIRBuilder) const;
@@ -531,6 +533,40 @@ static bool selectGId(Register resVReg, const SPIRVType *resType, const MachineI
       .addUse(globVar);
   return true;
 }
+
+static Register buildOpSampledImage(Register image, Register sampler,
+                                    MachineIRBuilder &MIRBuilder,
+                                    SPIRVTypeRegistry *TR) {
+  const auto MRI = MIRBuilder.getMRI();
+  SPIRVType *imageType = TR->getSPIRVTypeForVReg(image);
+  SPIRVType *sampImTy =
+      TR->getOrCreateSPIRVType(TR->getTypeForSPIRVType(imageType), MIRBuilder);
+
+  Register sampledImage = MRI->createVirtualRegister(&SPIRV::IDRegClass);
+  auto SampImMIB = MIRBuilder.buildInstr(SPIRV::OpSampledImage)
+                       .addDef(sampledImage)
+                       .addUse(TR->getSPIRVTypeID(sampImTy))
+                       .addUse(image)
+                       .addUse(sampler);
+  TR->constrainRegOperands(SampImMIB);
+  return sampledImage;
+}
+
+bool SPIRVInstructionSelector::selectSampledImage(Register resVReg, const SPIRVType *resType, const MachineInstr &I, MachineIRBuilder &MIRBuilder, SPIRVTypeRegistry *TR) const {
+  Register lod = buildI32Constant(0, MIRBuilder);
+  Register image = I.getOperand(2).getReg();
+  Register sampler = I.getOperand(3).getReg();
+  Register coord = I.getOperand(4).getReg();
+  Register sampledImage = buildOpSampledImage(image, sampler, MIRBuilder, TR);
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpImageSampleExplicitLod)
+    .addDef(resVReg)
+    .addUse(TR->getSPIRVTypeID(resType))
+    .addUse(sampledImage)
+    .addUse(coord)
+    .addImm(ImageOperand::Lod)
+    .addUse(lod);
+  return TR->constrainRegOperands(MIB);
+}
 bool SPIRVInstructionSelector::selectIntrinsic(Register resVReg,
     const SPIRVType *resType,
     const MachineInstr &I,
@@ -538,6 +574,8 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register resVReg,
   switch(I.getOperand(1).getIntrinsicID()){
     case Intrinsic::spirv_builtin_ext:
       return selectGId(resVReg, resType, I, MIRBuilder, &TR);
+    case Intrinsic::spirv_read_sampled_image:
+      return selectSampledImage(resVReg, resType, I, MIRBuilder, &TR);
     default:
       return false;
   }
