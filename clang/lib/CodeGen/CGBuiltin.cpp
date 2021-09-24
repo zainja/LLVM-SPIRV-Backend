@@ -4374,6 +4374,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     const clang::FunctionProtoType* calleeProto = E->getCallee()->getType()->castAs<FunctionProtoType>();
     const IdentifierInfo* II = E->getDirectCallee()->getLiteralIdentifier();
     auto Index = isOpenCLBuiltin(II->getName());
+    GetOpenCLBuiltinFctOverloads(Context, GenTypeMaxCnt, FunctionList, RetTypes,
+                                ArgTypes)
     if(Index.first){
       std::set<const FunctionProtoType*> validOverloads;
       getAllOCLOverloads(this, II, Index.first - 1, Index.second, validOverloads);
